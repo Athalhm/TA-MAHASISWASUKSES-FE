@@ -48,7 +48,7 @@ export default function RootLayout({ children }) {
 
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
-      const [profileResponse, statsResponse] = await Promise.all([
+      const [profileResponse, gamificationResponse] = await Promise.all([
         fetch(`${baseUrl}/api/v1/user/profile`, {
           method: "GET",
           cache: "no-store",
@@ -57,7 +57,7 @@ export default function RootLayout({ children }) {
             Authorization: token ? `Bearer ${token}` : "",
           },
         }),
-        fetch(`${baseUrl}/api/v1/user/stats`, {
+        fetch(`${baseUrl}/api/v1/gamification/summary`, {
           method: "GET",
           cache: "no-store",
           headers: {
@@ -68,18 +68,34 @@ export default function RootLayout({ children }) {
       ]);
 
       if (!profileResponse.ok) {
-        throw new Error("Gagal mengambil data profile");
+        let message = "Gagal mengambil data profile";
+        try {
+          const errorData = await profileResponse.json();
+          message =
+            errorData?.message ||
+            errorData?.detail ||
+            `${message} (${profileResponse.status})`;
+        } catch {}
+        throw new Error(message);
       }
 
-      if (!statsResponse.ok) {
-        throw new Error("Gagal mengambil data statistik user");
+      if (!gamificationResponse.ok) {
+        let message = "Gagal mengambil data gamification summary";
+        try {
+          const errorData = await gamificationResponse.json();
+          message =
+            errorData?.message ||
+            errorData?.detail ||
+            `${message} (${gamificationResponse.status})`;
+        } catch {}
+        throw new Error(message);
       }
 
       const profileData = await profileResponse.json();
-      const statsData = await statsResponse.json();
+      const gamificationData = await gamificationResponse.json();
 
       setUser(profileData || null);
-      setXp(statsData?.total_points ?? 0);
+      setXp(gamificationData?.total_xp_earned ?? 0);
     } catch (err) {
       console.error("Layout fetch error:", err);
       setError(err.message || "Terjadi kesalahan");

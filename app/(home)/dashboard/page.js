@@ -22,11 +22,7 @@ import {
 } from "lucide-react";
 
 function SectionLabel({ children }) {
-  return (
-    <p className="text-[15px] font-semibold text-[#1f1f1f]">
-      {children}
-    </p>
-  );
+  return <p className="text-[15px] font-semibold text-[#1f1f1f]">{children}</p>;
 }
 
 function CardShell({ children, className = "" }) {
@@ -40,8 +36,10 @@ function CardShell({ children, className = "" }) {
 }
 
 function ProgressBar({ value = 0, total = 5 }) {
-  const safeValue = Math.max(0, Math.min(value, total));
-  const percentage = total > 0 ? (safeValue / total) * 100 : 0;
+  const safeTotal = Number(total || 0);
+  const safeValue = Number(value || 0);
+  const percentage =
+    safeTotal > 0 ? Math.max(0, Math.min((safeValue / safeTotal) * 100, 100)) : 0;
 
   return (
     <div className="h-[8px] w-full overflow-hidden rounded-full bg-[#dfdfdf]">
@@ -65,7 +63,7 @@ function ProgressSection({ progress }) {
           Selamat Datang Kembali!
         </h2>
         <p className="mt-1 text-[11px] text-[#6f6f6f] sm:text-[12px]">
-          Anda telah menyelesaikan {progress.completed} dari {progress.total} quest hari ini.
+          Anda telah menyelesaikan {progress.completed} dari {progress.total} quest.
           Tetap semangat!
         </p>
 
@@ -314,23 +312,27 @@ function RecentActivitySection({ activities }) {
       <h3 className="text-[14px] font-semibold text-[#1f1f1f]">Aktivitas Terbaru</h3>
 
       <div className="mt-4">
-        {activities.map((item, index) => (
-          <div
-            key={item.id}
-            className={`${index !== activities.length - 1 ? "border-b border-[#e5e5e5]" : ""} py-3`}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[12px] font-medium text-[#1f1f1f]">{item.title}</p>
-                <p className="mt-1 text-[11px] text-[#7a7a7a]">{item.time}</p>
-              </div>
+        {activities.length === 0 ? (
+          <p className="text-[12px] text-[#7a7a7a]">Belum ada aktivitas terbaru.</p>
+        ) : (
+          activities.map((item, index) => (
+            <div
+              key={item.id}
+              className={`${index !== activities.length - 1 ? "border-b border-[#e5e5e5]" : ""} py-3`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[12px] font-medium text-[#1f1f1f]">{item.title}</p>
+                  <p className="mt-1 text-[11px] text-[#7a7a7a]">{item.time}</p>
+                </div>
 
-              <p className="shrink-0 text-[11px] font-medium text-[#10b981]">
-                {item.reward}
-              </p>
+                <p className="shrink-0 text-[11px] font-medium text-[#10b981]">
+                  {item.reward}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </CardShell>
   );
@@ -397,8 +399,21 @@ function EmptyState() {
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState(null);
   const [targets, setTargets] = useState([]);
+  const [quizList, setQuizList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const getBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+  const getAuthHeaders = () => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+    return {
+      "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    };
+  };
 
   const formatNumber = (value) => {
     return new Intl.NumberFormat("id-ID").format(Number(value || 0));
@@ -452,124 +467,13 @@ export default function DashboardPage() {
     return "Medium";
   };
 
-  const normalizeDashboardResponse = (data) => {
-    const summary = data?.summary || data?.stats || {};
-    const progressSource = data?.progress || {};
+  const normalizeCategory = (category) => {
+    const raw = String(category || "").toLowerCase();
 
-    const targetsSource =
-      data?.targets ||
-      data?.activeTargets ||
-      data?.tasks ||
-      [];
-
-    const activitiesSource =
-      data?.activities ||
-      data?.recentActivities ||
-      data?.histories ||
-      [];
-
-    const certificateSource =
-      data?.certificate ||
-      data?.latestCertificate ||
-      data?.certificateData ||
-      null;
-
-    const completedQuest =
-      progressSource?.completed ??
-      summary?.questCompletedToday ??
-      summary?.completedQuestToday ??
-      0;
-
-    const totalQuest =
-      progressSource?.total ??
-      summary?.totalQuestToday ??
-      summary?.dailyQuestTotal ??
-      5;
-
-    return {
-      progress: {
-        completed: Number(completedQuest || 0),
-        total: Number(totalQuest || 0),
-      },
-      stats: {
-        totalXp: formatNumber(
-          summary?.totalXp ?? summary?.xp ?? summary?.total_xp ?? 0
-        ),
-        questCompleted: String(
-          summary?.questCompleted ??
-            summary?.quest_finished ??
-            summary?.completedQuest ??
-            0
-        ),
-        achievement: String(
-          summary?.achievement ??
-            summary?.achievements ??
-            summary?.achievementCount ??
-            0
-        ),
-        streak:
-          summary?.streakLabel ||
-          (summary?.streakDays != null ? `${summary.streakDays} hari` : "0 hari"),
-      },
-      targets: targetsSource.map((item, index) => ({
-        id: item?.id ?? item?._id ?? index + 1,
-        title: item?.title ?? item?.name ?? "Target tanpa judul",
-        description: item?.description ?? item?.desc ?? "-",
-        deadline: formatDeadline(
-          item?.deadline ??
-            item?.dueDate ??
-            item?.due_date ??
-            item?.targetDate
-        ),
-        category:
-          item?.category ??
-          item?.type ??
-          item?.label ??
-          "Tugas Kuliah",
-        priority: normalizePriority(item?.priority),
-        completed: Boolean(
-          item?.completed ?? item?.isCompleted ?? item?.done ?? false
-        ),
-      })),
-      certificate: certificateSource
-        ? {
-            id: certificateSource?.id ?? certificateSource?._id ?? 1,
-            category:
-              certificateSource?.category ??
-              certificateSource?.courseCategory ??
-              certificateSource?.module ??
-              "Sertifikat",
-            title:
-              certificateSource?.title ??
-              certificateSource?.name ??
-              certificateSource?.courseName ??
-              "Sertifikat",
-            fileUrl:
-              certificateSource?.fileUrl ??
-              certificateSource?.url ??
-              certificateSource?.downloadUrl ??
-              null,
-          }
-        : null,
-      activities: activitiesSource.map((item, index) => ({
-        id: item?.id ?? item?._id ?? index + 1,
-        title:
-          item?.title ??
-          item?.activity ??
-          item?.description ??
-          "Aktivitas",
-        time: formatRelativeTime(
-          item?.createdAt ??
-            item?.created_at ??
-            item?.time ??
-            item?.timestamp
-        ),
-        reward:
-          item?.rewardLabel ||
-          item?.xpLabel ||
-          `+${item?.xp ?? item?.reward ?? 0} XP`,
-      })),
-    };
+    if (raw === "akademik") return "Tugas Kuliah";
+    if (raw === "organisasi") return "Organisasi";
+    if (raw === "pribadi") return "Pribadi";
+    return category || "Tugas Kuliah";
   };
 
   const fetchDashboardData = async () => {
@@ -577,42 +481,123 @@ export default function DashboardPage() {
       setLoading(true);
       setError("");
 
-      const token = localStorage.getItem("token");
+      const baseUrl = getBaseUrl();
 
-      const response = await fetch("/api/dashboard", {
-        method: "GET",
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-      });
+      const [
+        summaryResponse,
+        tasksResponse,
+        historyResponse,
+        achievementResponse,
+        quizResponse,
+      ] = await Promise.all([
+        fetch(`${baseUrl}/api/v1/gamification/summary`, {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${baseUrl}/api/v1/progress-tracking/tasks`, {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${baseUrl}/api/v1/gamification/history`, {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${baseUrl}/api/v1/gamification/achievement`, {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${baseUrl}/api/v1/quiz/quizzes`, {
+          method: "GET",
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+      ]);
 
-      if (!response.ok) {
-        let message = "Gagal mengambil data dashboard";
-
-        try {
-          const errorData = await response.json();
-          message =
-            errorData?.message ||
-            errorData?.error ||
-            `${message} (${response.status})`;
-        } catch {
-          message = `${message} (${response.status})`;
-        }
-
-        throw new Error(message);
+      if (!summaryResponse.ok) {
+        throw new Error("Gagal mengambil gamification summary");
       }
 
-      const rawData = await response.json();
-      const normalizedData = normalizeDashboardResponse(rawData);
+      if (!tasksResponse.ok) {
+        throw new Error("Gagal mengambil data tasks");
+      }
+
+      if (!historyResponse.ok) {
+        throw new Error("Gagal mengambil data history");
+      }
+
+      if (!achievementResponse.ok) {
+        throw new Error("Gagal mengambil data achievement");
+      }
+
+      if (!quizResponse.ok) {
+        throw new Error("Gagal mengambil data quiz");
+      }
+
+      const summaryData = await summaryResponse.json();
+      const tasksData = await tasksResponse.json();
+      const historyData = await historyResponse.json();
+      const achievementData = await achievementResponse.json();
+      const quizData = await quizResponse.json();
+
+      const safeTasks = Array.isArray(tasksData) ? tasksData : [];
+      const safeHistory = Array.isArray(historyData) ? historyData : [];
+      const safeAchievement = Array.isArray(achievementData) ? achievementData : [];
+      const safeQuiz = Array.isArray(quizData) ? quizData : [];
+
+      const normalizedTargets = safeTasks.map((item) => ({
+        id: item?.id,
+        title: item?.title || "Target tanpa judul",
+        description: item?.description || "-",
+        deadline: formatDeadline(item?.deadline),
+        category: normalizeCategory(item?.category),
+        priority: normalizePriority(item?.priority),
+        completed: Boolean(item?.is_completed),
+      }));
+
+      const latestCertificateAchievement =
+        safeAchievement.find((item) => item?.is_completed) || null;
+
+      const normalizedData = {
+        progress: {
+          completed: Number(summaryData?.total_quest_completed ?? 0),
+          total: Number(summaryData?.total_quest ?? 0),
+        },
+        stats: {
+          totalXp: formatNumber(summaryData?.total_xp_earned ?? 0),
+          questCompleted: String(summaryData?.total_quest_completed ?? 0),
+          achievement: String(
+            safeAchievement.filter((item) => item?.is_completed).length
+          ),
+          streak: `${summaryData?.current_streak ?? 0} hari`,
+        },
+        targets: normalizedTargets,
+        certificate: latestCertificateAchievement
+          ? {
+              id: latestCertificateAchievement?.id ?? null,
+              category: latestCertificateAchievement?.type || "Achievement",
+              title: latestCertificateAchievement?.title || "Sertifikat",
+            }
+          : null,
+        activities: safeHistory.map((item) => ({
+          id: item?.id,
+          title: item?.title || "Aktivitas",
+          time: formatRelativeTime(item?.completed_at),
+          reward: `+${item?.xp_reward ?? 0} XP`,
+        })),
+      };
 
       setDashboardData(normalizedData);
-      setTargets(normalizedData.targets);
+      setTargets(normalizedTargets);
+      setQuizList(safeQuiz);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
       setDashboardData(null);
       setTargets([]);
+      setQuizList([]);
       setError(err.message || "Terjadi kesalahan yang tidak diketahui.");
     } finally {
       setLoading(false);
@@ -632,42 +617,27 @@ export default function DashboardPage() {
     };
   }, [dashboardData, targets]);
 
-  const handleToggleTarget = async (id) => {
-    const previousTargets = [...targets];
-
-    const nextTargets = targets.map((item) =>
-      item.id === id ? { ...item, completed: !item.completed } : item
+  const handleToggleTarget = (id) => {
+    setTargets((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, completed: !item.completed } : item
+      )
     );
-
-    setTargets(nextTargets);
-
-    try {
-      const token = localStorage.getItem("token");
-      const selectedTarget = nextTargets.find((item) => item.id === id);
-
-      const response = await fetch(`/api/targets/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        body: JSON.stringify({
-          completed: selectedTarget?.completed,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Gagal update target");
-      }
-    } catch (err) {
-      console.error("Update target error:", err);
-      setTargets(previousTargets);
-      alert("Status target gagal diperbarui");
-    }
   };
 
   const handleStartQuiz = () => {
-    window.location.href = "/quiz";
+    if (quizList.length === 0) {
+      window.location.href = "/quiz";
+      return;
+    }
+
+    const firstQuiz = quizList[0];
+    if (!firstQuiz?.id) {
+      window.location.href = "/quiz";
+      return;
+    }
+
+    window.location.href = `/quiz`;
   };
 
   const handleAddTarget = () => {
@@ -682,13 +652,40 @@ export default function DashboardPage() {
     window.location.href = "/achievement";
   };
 
-  const handleDownloadCertificate = () => {
-    if (!mergedData?.certificate?.fileUrl) {
-      alert("File sertifikat belum tersedia");
+  const handleDownloadCertificate = async () => {
+    if (!mergedData?.certificate?.id) {
+      alert("Sertifikat belum tersedia");
       return;
     }
 
-    window.open(mergedData.certificate.fileUrl, "_blank");
+    try {
+      const baseUrl = getBaseUrl();
+
+      const response = await fetch(
+        `${baseUrl}/api/v1/certificate/${mergedData.certificate.id}`,
+        {
+          method: "GET",
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Gagal mengunduh sertifikat");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "certificate";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert("File sertifikat gagal diunduh");
+    }
   };
 
   return (

@@ -61,56 +61,55 @@ export default function Page() {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      setError("");
+      setErrorMessage("");
+
       const baseUrl = getBaseUrl();
 
-      const response = await fetch(`${baseUrl}/api/targets-tugas`, {
-        method: "GET",
-        cache: "no-store",
-        headers: getAuthHeaders(),
-      });
+      const [tasksRes, summaryRes] = await Promise.all([
+        fetch(`${baseUrl}/api/v1/progress-tracking/tasks`, {
+          method: "GET",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${baseUrl}/api/v1/progress-tracking/summary`, {
+          method: "GET",
+          headers: getAuthHeaders(),
+        }),
+      ]);
 
-      if (!response.ok) {
+      if (!tasksRes.ok || !summaryRes.ok) {
         throw new Error("Gagal mengambil data target dan tugas.");
       }
 
-      const result = await response.json();
+      const tasksData = await tasksRes.json();
+      const summaryData = await summaryRes.json();
 
-      const normalizedTasks = Array.isArray(result?.data)
-        ? result.data
-        : Array.isArray(result)
-        ? result
+      const normalizedTasks = Array.isArray(tasksData)
+        ? tasksData.map((task) => ({
+            ...task,
+            status: task.is_completed
+              ? "done"
+              : "todo",
+            priority:
+              task.priority === "tinggi"
+                ? "high"
+                : task.priority === "rendah"
+                ? "low"
+                : "medium",
+          }))
         : [];
 
       setTasks(normalizedTasks);
-
-      const completedCount = normalizedTasks.filter((task) => {
-        const status = task?.status?.toLowerCase();
-        return status === "done" || status === "selesai";
-      }).length;
-
-      const progressCount = normalizedTasks.filter((task) => {
-        const status = task?.status?.toLowerCase();
-        return (
-          status === "progress" ||
-          status === "proses" ||
-          status === "on progress"
-        );
-      }).length;
-
-      const highPriorityCount = normalizedTasks.filter((task) => {
-        return task?.priority?.toLowerCase() === "high";
-      }).length;
-
       setSummary({
-        completed: result?.summary?.completed ?? completedCount,
-        total: result?.summary?.total ?? normalizedTasks.length,
-        progress: result?.summary?.progress ?? progressCount,
-        highPriority: result?.summary?.highPriority ?? highPriorityCount,
+        completed: summaryData.task_completed || 0,
+        total: summaryData.todo || 0,
+        progress: summaryData.on_progress || 0,
+        highPriority: summaryData.high_priority || 0,
       });
+
     } catch (error) {
       console.error(error);
       setErrorMessage(error?.message || "Data target dan tugas gagal dimuat.");
+
       setTasks([]);
       setSummary({
         completed: 0,
@@ -485,7 +484,7 @@ export default function Page() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
-          <div className="relative w-full max-w-4xl rounded-[22px] bg-[#f4f4f4] px-6 py-7 shadow-2xl sm:px-10 sm:py-10 md:px-14 md:py-12">
+          <div className="relative w-full max-w-2xl rounded-[18px] bg-[#f4f4f4] px-5 py-6 shadow-2xl sm:px-6 sm:py-7">
             <button
               type="button"
               onClick={handleCloseModal}
@@ -496,17 +495,17 @@ export default function Page() {
 
             <div className="mx-auto max-w-2xl">
               <div className="text-center">
-                <h2 className="text-3xl font-bold tracking-[-0.02em] text-[#111]">
+                <h2 className="text-2xl font-bold tracking-[-0.02em] text-[#111]">
                   Tambah Tugas
                 </h2>
-                <p className="mt-2 text-lg text-[#8c8c8c]">
+                <p className="mt-1 text-sm text-[#8c8c8c]">
                   Isi Detail tugas yang mau kamu selesaikan
                 </p>
               </div>
 
-              <form onSubmit={handleSubmitTask} className="mt-10 space-y-7">
+              <form onSubmit={handleSubmitTask} className="mt-6 space-y-5">
                 <div>
-                  <label className="mb-3 block text-lg font-semibold text-[#222]">
+                  <label className="mb-2 block text-sm font-semibold text-[#222]">
                     Judul Tugas
                   </label>
                   <input
@@ -514,12 +513,12 @@ export default function Page() {
                     value={formData.title}
                     onChange={(e) => handleInputChange("title", e.target.value)}
                     placeholder="Contoh : Tugas besar algoritma pemograman"
-                    className="h-14 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-base text-[#222] outline-none placeholder:text-[#9b9b9b] focus:border-[#ff4d4f]"
+                    className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#222] outline-none placeholder:text-[#9b9b9b] focus:border-[#ff4d4f]"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-4 block text-lg font-semibold text-[#222]">
+                  <label className="mb-2 block text-sm font-semibold text-[#222]">
                     Kategori
                   </label>
 
@@ -537,14 +536,14 @@ export default function Page() {
                           key={item.label}
                           type="button"
                           onClick={() => handleInputChange("category", item.label)}
-                          className={`flex min-h-[110px] flex-col items-center justify-center rounded-2xl border transition ${
+                          className={`flex min-h-[80px] flex-col items-center justify-center rounded-2xl border transition ${
                             isActive
                               ? "border-[#ff4d4f] bg-[#fff1f1]"
                               : "border-[#cfcfcf] bg-transparent hover:bg-white"
                           }`}
                         >
                           <Icon
-                            className={`mb-3 h-7 w-7 ${
+                            className={`mb-3 h-5 w-5 ${
                               isActive ? "text-[#ff4d4f]" : "text-[#8a8a8a]"
                             }`}
                           />
@@ -559,19 +558,19 @@ export default function Page() {
 
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-8">
                   <div>
-                    <label className="mb-3 block text-lg font-semibold text-[#222]">
+                    <label className="mb-2 block text-sm font-semibold text-[#222]">
                       Deadline Tugas
                     </label>
                     <input
                       type="date"
                       value={formData.deadline}
                       onChange={(e) => handleInputChange("deadline", e.target.value)}
-                      className="h-14 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-base text-[#666] outline-none focus:border-[#ff4d4f]"
+                      className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#666] outline-none focus:border-[#ff4d4f]"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-3 block text-lg font-semibold text-[#222]">
+                    <label className="mb-2 block text-sm font-semibold text-[#222]">
                       Tingkat Kesulitan
                     </label>
 
@@ -581,7 +580,7 @@ export default function Page() {
                         onChange={(e) =>
                           handleInputChange("difficulty", e.target.value)
                         }
-                        className="h-14 w-full appearance-none rounded-xl border border-[#d1d1d1] bg-transparent px-10 pr-12 text-base font-medium text-[#222] outline-none focus:border-[#ff4d4f]"
+                        className="h-11 w-full appearance-none rounded-xl border border-[#d1d1d1] bg-transparent px-10 pr-12 text-sm font-medium text-[#222] outline-none focus:border-[#ff4d4f]"
                       >
                         <option value="easy">easy</option>
                         <option value="medium">medium</option>
@@ -606,23 +605,22 @@ export default function Page() {
                 </div>
 
                 <div>
-                  <label className="mb-3 block text-lg font-semibold text-[#222]">
+                  <label className="mb-2 block text-sm font-semibold text-[#222]">  
                     Deskripsi (Optional)
                   </label>
                   <textarea
-                    rows={5}
+                    rows={3}
                     value={formData.description}
                     onChange={(e) => handleInputChange("description", e.target.value)}
                     placeholder="Catatan Tambahan"
-                    className="w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 py-4 text-base text-[#222] outline-none placeholder:text-[#9c9c9c] focus:border-[#ff4d4f]"
-                  />
+                    className="w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 py-4 text-sm text-[#222] outline-none placeholder:text-[#9c9c9c] focus:border-[#ff4d4f]"/>
                 </div>
 
                 <div className="flex flex-col-reverse gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className="inline-flex h-12 items-center justify-center rounded-xl bg-[#6d6d6d] px-8 text-lg font-semibold text-white transition hover:bg-[#5d5d5d] sm:min-w-[124px]"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#6d6d6d] px-8 text-sm font-semibold text-white transition hover:bg-[#5d5d5d] sm:min-w-[124px]"
                   >
                     Batal
                   </button>
@@ -630,7 +628,7 @@ export default function Page() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="inline-flex h-12 items-center justify-center rounded-xl bg-[#ff1f28] px-8 text-lg font-semibold text-white transition hover:bg-[#e61b23] disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-[128px]"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#ff1f28] px-8 text-smm font-semibold text-white transition hover:bg-[#e61b23] disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-[128px]"
                   >
                     {submitting ? "Menyimpan..." : "Tambah"}
                   </button>
