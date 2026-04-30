@@ -12,9 +12,9 @@ export default function HomePage() {
     if (loading) return;
 
     if (isAuthenticated) {
-      router.push("/sign-in");
+      router.replace("/dashboard");
     } else {
-      router.push("/dashboard");
+      router.replace("/sign-in");
     }
   }, [isAuthenticated, loading, router]);
 

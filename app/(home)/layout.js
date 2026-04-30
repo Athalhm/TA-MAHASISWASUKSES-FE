@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { fetchWithAuth } from "@/lib/api";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
   const [user, setUser] = useState(null);
   const [xp, setXp] = useState(0);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const menus = [
     { name: "Dashboard", icon: House, href: "/dashboard" },
@@ -54,7 +56,7 @@ export default function RootLayout({ children }) {
           cache: "no-store",
           headers: {
             "Content-Type": "application/json",
-            Authorization: token ? `Bearer ${token}` : "",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         }),
         fetch(`${baseUrl}/api/v1/gamification/summary`, {
@@ -62,13 +64,14 @@ export default function RootLayout({ children }) {
           cache: "no-store",
           headers: {
             "Content-Type": "application/json",
-            Authorization: token ? `Bearer ${token}` : "",
+            ...(token && { Authorization: `Bearer ${token}` }),
           },
         }),
       ]);
 
       if (!profileResponse.ok) {
         let message = "Gagal mengambil data profile";
+
         try {
           const errorData = await profileResponse.json();
           message =
@@ -76,11 +79,13 @@ export default function RootLayout({ children }) {
             errorData?.detail ||
             `${message} (${profileResponse.status})`;
         } catch {}
+
         throw new Error(message);
       }
 
       if (!gamificationResponse.ok) {
         let message = "Gagal mengambil data gamification summary";
+
         try {
           const errorData = await gamificationResponse.json();
           message =
@@ -88,6 +93,7 @@ export default function RootLayout({ children }) {
             errorData?.detail ||
             `${message} (${gamificationResponse.status})`;
         } catch {}
+
         throw new Error(message);
       }
 
@@ -95,20 +101,41 @@ export default function RootLayout({ children }) {
       const gamificationData = await gamificationResponse.json();
 
       setUser(profileData || null);
+
+      if (profileData) {
+        localStorage.setItem("user", JSON.stringify(profileData));
+      }
+
       setXp(gamificationData?.total_xp_earned ?? 0);
     } catch (err) {
       console.error("Layout fetch error:", err);
       setError(err.message || "Terjadi kesalahan");
-      setUser(null);
-      setXp(0);
+
+      const savedUser =
+        typeof window !== "undefined" ? localStorage.getItem("user") : null;
+
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {
+          setUser(null);
+        }
+      }
+
+      setXp((prev) => prev ?? 0);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchLayoutData();
+    setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    fetchLayoutData();
+  }, [mounted]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -121,6 +148,7 @@ export default function RootLayout({ children }) {
     };
 
     document.addEventListener("mousedown", handleClickOutside);
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
@@ -131,6 +159,7 @@ export default function RootLayout({ children }) {
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("token_type");
     localStorage.removeItem("user");
+
     setIsProfileOpen(false);
     router.push("/sign-in");
   };
@@ -222,7 +251,10 @@ export default function RootLayout({ children }) {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <CircleUserRound size={30} className="text-[#5d6b95]" />
+                          <CircleUserRound
+                            size={30}
+                            className="text-[#5d6b95]"
+                          />
                         )}
                       </div>
 
@@ -247,7 +279,9 @@ export default function RootLayout({ children }) {
                       className="flex w-full items-center gap-3 py-2 text-left text-[#111] transition hover:opacity-80"
                     >
                       <SlidersHorizontal size={18} strokeWidth={2.1} />
-                      <span className="text-[15px] font-medium">Edit Profile</span>
+                      <span className="text-[15px] font-medium">
+                        Edit Profile
+                      </span>
                     </button>
 
                     <div className="my-2 h-px w-full bg-[#d8d8d8]" />
@@ -269,7 +303,10 @@ export default function RootLayout({ children }) {
           {error && (
             <div className="border-t border-[#d9b3b8] bg-[#fff1f3] px-10 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#b5475a]">
-                <p>Data header gagal dimuat. Menampilkan data fallback sementara.</p>
+                <p>
+                  Data header gagal dimuat. Menampilkan data fallback sementara.
+                </p>
+
                 <button
                   type="button"
                   onClick={fetchLayoutData}

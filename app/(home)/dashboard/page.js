@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fetchWithAuth } from "@/lib/api";
 import {
   AlertCircle,
   ArrowRight,
@@ -317,7 +318,7 @@ function RecentActivitySection({ activities }) {
         ) : (
           activities.map((item, index) => (
             <div
-              key={item.id}
+              key={`${item.id}-${index}`}
               className={`${index !== activities.length - 1 ? "border-b border-[#e5e5e5]" : ""} py-3`}
             >
               <div className="flex items-start justify-between gap-4">
@@ -484,12 +485,12 @@ export default function DashboardPage() {
       const baseUrl = getBaseUrl();
 
       const [
-        summaryResponse,
-        tasksResponse,
-        historyResponse,
-        achievementResponse,
-        quizResponse,
-      ] = await Promise.all([
+        summaryResult,
+        tasksResult,
+        historyResult,
+        achievementResult,
+        quizResult,
+      ] = await Promise.allSettled([
         fetch(`${baseUrl}/api/v1/gamification/summary`, {
           method: "GET",
           cache: "no-store",
@@ -510,46 +511,44 @@ export default function DashboardPage() {
           cache: "no-store",
           headers: getAuthHeaders(),
         }),
-        fetch(`${baseUrl}/api/v1/quiz/quizzes`, {
+        fetch(`${baseUrl}/api/v1/quiz/`, {
           method: "GET",
           cache: "no-store",
           headers: getAuthHeaders(),
         }),
       ]);
 
-      if (!summaryResponse.ok) {
-        throw new Error("Gagal mengambil gamification summary");
-      }
+      const readJsonIfOk = async (result, fallback) => {
+        if (result.status !== "fulfilled") return fallback;
+        if (!result.value.ok) return fallback;
 
-      if (!tasksResponse.ok) {
-        throw new Error("Gagal mengambil data tasks");
-      }
+        try {
+          return await result.value.json();
+        } catch {
+          return fallback;
+        }
+      };
 
-      if (!historyResponse.ok) {
-        throw new Error("Gagal mengambil data history");
-      }
+      const summaryData = await readJsonIfOk(summaryResult, {
+        total_quest: 0,
+        total_quest_completed: 0,
+        total_xp_earned: 0,
+        current_ranking: 0,
+        current_streak: 0,
+      });
 
-      if (!achievementResponse.ok) {
-        throw new Error("Gagal mengambil data achievement");
-      }
-
-      if (!quizResponse.ok) {
-        throw new Error("Gagal mengambil data quiz");
-      }
-
-      const summaryData = await summaryResponse.json();
-      const tasksData = await tasksResponse.json();
-      const historyData = await historyResponse.json();
-      const achievementData = await achievementResponse.json();
-      const quizData = await quizResponse.json();
+      const tasksData = await readJsonIfOk(tasksResult, []);
+      const historyData = await readJsonIfOk(historyResult, []);
+      const achievementData = await readJsonIfOk(achievementResult, []);
+      const quizData = await readJsonIfOk(quizResult, []);
 
       const safeTasks = Array.isArray(tasksData) ? tasksData : [];
       const safeHistory = Array.isArray(historyData) ? historyData : [];
       const safeAchievement = Array.isArray(achievementData) ? achievementData : [];
       const safeQuiz = Array.isArray(quizData) ? quizData : [];
 
-      const normalizedTargets = safeTasks.map((item) => ({
-        id: item?.id,
+      const normalizedTargets = safeTasks.slice(0, 3).map((item, index) => ({
+        id: item?.id ?? `task-${index}`,
         title: item?.title || "Target tanpa judul",
         description: item?.description || "-",
         deadline: formatDeadline(item?.deadline),
@@ -558,8 +557,12 @@ export default function DashboardPage() {
         completed: Boolean(item?.is_completed),
       }));
 
-      const latestCertificateAchievement =
-        safeAchievement.find((item) => item?.is_completed) || null;
+      const completedAchievement = safeAchievement.filter(
+        (item) => item?.is_completed
+      );
+
+      const certificateSource =
+        safeQuiz.find((quiz) => quiz?.certificate_id) || null;
 
       const normalizedData = {
         progress: {
@@ -569,21 +572,19 @@ export default function DashboardPage() {
         stats: {
           totalXp: formatNumber(summaryData?.total_xp_earned ?? 0),
           questCompleted: String(summaryData?.total_quest_completed ?? 0),
-          achievement: String(
-            safeAchievement.filter((item) => item?.is_completed).length
-          ),
+          achievement: String(completedAchievement.length),
           streak: `${summaryData?.current_streak ?? 0} hari`,
         },
         targets: normalizedTargets,
-        certificate: latestCertificateAchievement
+        certificate: certificateSource
           ? {
-              id: latestCertificateAchievement?.id ?? null,
-              category: latestCertificateAchievement?.type || "Achievement",
-              title: latestCertificateAchievement?.title || "Sertifikat",
+              id: certificateSource?.certificate_id,
+              category: certificateSource?.category || "Quiz",
+              title: certificateSource?.title || "Sertifikat",
             }
           : null,
-        activities: safeHistory.map((item) => ({
-          id: item?.id,
+        activities: safeHistory.slice(0, 3).map((item, index) => ({
+          id: `${item?.id ?? "activity"}-${index}`,
           title: item?.title || "Aktivitas",
           time: formatRelativeTime(item?.completed_at),
           reward: `+${item?.xp_reward ?? 0} XP`,
@@ -626,18 +627,7 @@ export default function DashboardPage() {
   };
 
   const handleStartQuiz = () => {
-    if (quizList.length === 0) {
-      window.location.href = "/quiz";
-      return;
-    }
-
-    const firstQuiz = quizList[0];
-    if (!firstQuiz?.id) {
-      window.location.href = "/quiz";
-      return;
-    }
-
-    window.location.href = `/quiz`;
+    window.location.href = "/quiz";
   };
 
   const handleAddTarget = () => {
@@ -676,11 +666,13 @@ export default function DashboardPage() {
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
+
       link.href = url;
-      link.download = "certificate";
+      link.download = "certificate.pdf";
       document.body.appendChild(link);
       link.click();
       link.remove();
+
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error(err);
