@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Star,
   Tag,
+  Target,
   Trophy,
   Zap,
 } from "lucide-react";
@@ -36,21 +37,33 @@ function CardShell({ children, className = "" }) {
   );
 }
 
-function ProgressBar({ value = 0, total = 5 }) {
-  const safeTotal = Number(total || 0);
-  const safeValue = Number(value || 0);
-  const percentage =
-    safeTotal > 0 ? Math.max(0, Math.min((safeValue / safeTotal) * 100, 100)) : 0;
+  function ProgressBar({ value = 0, total = 0 }) {
+    const [animatedWidth, setAnimatedWidth] = useState(0);
 
-  return (
-    <div className="h-[8px] w-full overflow-hidden rounded-full bg-[#dfdfdf]">
-      <div
-        className="h-full rounded-full bg-gradient-to-r from-[#ef1f1f] to-[#f59e0b] transition-all duration-500"
-        style={{ width: `${percentage}%` }}
-      />
-    </div>
-  );
-}
+    const safeTotal = Number(total || 0);
+    const safeValue = Number(value || 0);
+    const percentage =
+      safeTotal > 0
+        ? Math.max(0, Math.min((safeValue / safeTotal) * 100, 100))
+        : 0;
+
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        setAnimatedWidth(percentage);
+      }, 200);
+
+      return () => clearTimeout(timer);
+    }, [percentage]);
+
+    return (
+      <div className="h-[8px] w-full overflow-hidden rounded-full bg-[#dfdfdf]">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#ef1f1f] to-[#f59e0b] transition-all duration-1000 ease-out"
+          style={{ width: `${animatedWidth}%` }}
+        />
+      </div>
+    );
+  }
 
 function ProgressSection({ progress }) {
   return (
@@ -80,7 +93,9 @@ function StartNowSection({ onStartQuiz, onAddTarget }) {
   return (
     <div className="rounded-[16px] border border-[#ff4d4f] bg-[#f8f8f8] px-6 py-5">
       <h3 className="text-[16px] font-semibold text-[#1f1f1f]">Mulai Sekarang</h3>
-      <p className="mt-1 text-[11px] text-[#6f6f6f]">Ayo tingkat skill mu hari ini!</p>
+      <p className="mt-1 text-[11px] text-[#6f6f6f]">
+        Ayo tingkat skill mu hari ini!
+      </p>
 
       <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
         <button
@@ -117,7 +132,7 @@ function getPriorityClass(priority) {
 
 function TargetItem({ item, onToggle }) {
   return (
-    <CardShell className="px-4 py-3.5">
+    <CardShell className="px-4 py-4">
       <div className="flex items-start gap-3">
         <button
           onClick={() => onToggle(item.id)}
@@ -125,25 +140,25 @@ function TargetItem({ item, onToggle }) {
           className="mt-0.5 shrink-0"
         >
           {item.completed ? (
-            <CheckCircle2 className="h-[18px] w-[18px] text-[#16a34a]" />
+            <CheckCircle2 className="h-[20px] w-[20px] text-[#16a34a]" />
           ) : (
-            <div className="h-[18px] w-[18px] rounded-full border border-[#d2d2d2] bg-[#efefef]" />
+            <div className="h-[20px] w-[20px] rounded-full border-2 border-[#d2d2d2] bg-white" />
           )}
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <h4 className="truncate text-[12px] font-semibold text-[#1f1f1f] sm:text-[13px]">
+              <h4 className="text-[13px] font-semibold text-[#1f1f1f]">
                 {item.title}
               </h4>
-              <p className="mt-1 text-[10px] leading-relaxed text-[#8a8a8a]">
+              <p className="mt-0.5 text-[11px] leading-relaxed text-[#8a8a8a]">
                 {item.description}
               </p>
             </div>
 
             <div
-              className={`inline-flex h-[22px] min-w-[44px] shrink-0 items-center justify-center rounded-full border px-3 text-[10px] font-semibold ${getPriorityClass(
+              className={`inline-flex h-[24px] shrink-0 items-center justify-center rounded-full border px-3 text-[11px] font-semibold ${getPriorityClass(
                 item.priority
               )}`}
             >
@@ -151,13 +166,13 @@ function TargetItem({ item, onToggle }) {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="inline-flex items-center gap-1 text-[10px] text-[#ef4444]">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <div className="inline-flex items-center gap-1 text-[11px] text-[#ef4444]">
               <Clock3 className="h-3 w-3" />
               <span>{item.deadline}</span>
             </div>
 
-            <div className="inline-flex items-center gap-1 text-[10px] text-[#8a8a8a]">
+            <div className="inline-flex items-center gap-1 text-[11px] text-[#8a8a8a]">
               <Tag className="h-3 w-3" />
               <span>{item.category}</span>
             </div>
@@ -168,18 +183,39 @@ function TargetItem({ item, onToggle }) {
   );
 }
 
-function TargetSection({ targets, onToggleTarget }) {
+function TargetSection({ targets, onToggleTarget, onAddTarget }) {
   return (
     <div>
       <div className="mb-3">
         <SectionLabel>Target Aktif</SectionLabel>
       </div>
 
-      <div className="space-y-3">
-        {targets.map((item) => (
-          <TargetItem key={item.id} item={item} onToggle={onToggleTarget} />
-        ))}
-      </div>
+      {targets.length > 0 ? (
+        <div className="space-y-3">
+          {targets.slice(0, 3).map((item) => (
+            <TargetItem key={item.id} item={item} onToggle={onToggleTarget} />
+          ))}
+        </div>
+      ) : (
+        <CardShell className="flex min-h-[300px] flex-col items-center justify-center px-6 py-8 text-center">
+          <h3 className="text-[16px] font-semibold text-[#1f1f1f]">
+            Belum ada Target?
+          </h3>
+
+          <p className="mt-5 text-[13px] text-[#7a7a7a]">
+            Ayo tambahkan Target dan Tugas milik kamu!
+          </p>
+
+          <button
+            type="button"
+            onClick={onAddTarget}
+            className="mt-8 inline-flex h-[42px] min-w-[280px] items-center justify-center gap-2 rounded-[6px] bg-[#f71d28] px-6 text-[15px] font-semibold text-white transition hover:bg-[#e31722]"
+          >
+            <Target className="h-5 w-5" />
+            Target dan Tugas
+          </button>
+        </CardShell>
+      )}
     </div>
   );
 }
@@ -191,7 +227,9 @@ function QuickActionItem({ icon, title, iconWrapClass, onClick }) {
       className="flex w-full items-center justify-between rounded-[16px] border border-[#cfcfcf] bg-[#f8f8f8] px-4 py-3 shadow-[0_3px_6px_rgba(0,0,0,0.14)] transition hover:-translate-y-[1px]"
     >
       <div className="flex items-center gap-3">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-[6px] ${iconWrapClass}`}>
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-[6px] ${iconWrapClass}`}
+        >
           {icon}
         </div>
         <span className="text-[12px] font-medium text-[#1f1f1f]">{title}</span>
@@ -228,37 +266,58 @@ function QuickActionSection({ onViewAllQuiz, onViewAchievement }) {
   );
 }
 
-function CertificateSection({ certificate, onDownload }) {
-  if (!certificate) return null;
-
+function CertificateSection({ certificate, onDownload, onGoQuiz }) {
   return (
     <div>
       <div className="mb-3">
         <SectionLabel>Sertifikat</SectionLabel>
       </div>
 
-      <CardShell className="px-4 py-3.5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#bdf3c6] text-[#16a34a]">
-            <Award className="h-4 w-4" />
+      {certificate ? (
+        <CardShell className="px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] bg-[#bdf3c6] text-[#16a34a]">
+              <Award className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] text-[#8a8a8a]">
+                {certificate.category}
+              </p>
+              <h4 className="mt-0.5 text-[14px] font-bold text-[#1f1f1f]">
+                {certificate.title}
+              </h4>
+            </div>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] text-[#8a8a8a]">{certificate.category}</p>
-            <h4 className="mt-1 text-[13px] font-bold text-[#1f1f1f]">
-              {certificate.title}
-            </h4>
-          </div>
-        </div>
+          <button
+            onClick={onDownload}
+            className="mt-4 inline-flex h-[36px] w-full items-center justify-center gap-2 rounded-[6px] bg-[#10b26f] px-4 text-[12px] font-semibold text-white transition hover:bg-[#0d9a60]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download Sertifikat
+          </button>
+        </CardShell>
+      ) : (
+      <CardShell className="px-5 py-5 text-center">
+        <h3 className="text-[14px] font-bold text-[#1f1f1f]">
+          Belum ada Sertifikat?
+        </h3>
+
+        <p className="mt-1 text-[12px] text-[#7a7a7a]">
+          Ayo dapatkan Sertifikat dari mengerjakan Quiz!
+        </p>
 
         <button
-          onClick={onDownload}
-          className="mt-4 inline-flex h-[30px] w-full items-center justify-center gap-2 rounded-[6px] bg-[#10b26f] px-4 text-[10px] font-medium text-white transition hover:bg-[#0d9a60]"
+          type="button"
+          onClick={onGoQuiz}
+          className="mt-3 inline-flex h-[34px] w-[160px] items-center justify-center gap-2 rounded-[6px] bg-[#f71d28] px-4 text-[13px] font-semibold text-white transition hover:bg-[#e31722]"
         >
-          <Download className="h-3 w-3" />
-          Download Sertifikat
+          <Brain className="h-4 w-4" />
+          Quiz
         </button>
       </CardShell>
+      )}
     </div>
   );
 }
@@ -266,7 +325,9 @@ function CertificateSection({ certificate, onDownload }) {
 function StatCard({ title, value, icon, iconWrapClass }) {
   return (
     <CardShell className="min-h-[88px] px-4 py-4">
-      <div className={`flex h-6 w-6 items-center justify-center rounded-[6px] ${iconWrapClass}`}>
+      <div
+        className={`flex h-6 w-6 items-center justify-center rounded-[6px] ${iconWrapClass}`}
+      >
         {icon}
       </div>
 
@@ -310,21 +371,33 @@ function StatsSection({ stats }) {
 function RecentActivitySection({ activities }) {
   return (
     <CardShell className="px-5 py-4 sm:px-6 sm:py-5">
-      <h3 className="text-[14px] font-semibold text-[#1f1f1f]">Aktivitas Terbaru</h3>
+      <h3 className="text-[14px] font-semibold text-[#1f1f1f]">
+        Aktivitas Terbaru
+      </h3>
 
       <div className="mt-4">
         {activities.length === 0 ? (
-          <p className="text-[12px] text-[#7a7a7a]">Belum ada aktivitas terbaru.</p>
+          <p className="text-[12px] text-[#7a7a7a]">
+            Belum ada aktivitas terbaru.
+          </p>
         ) : (
           activities.map((item, index) => (
             <div
               key={`${item.id}-${index}`}
-              className={`${index !== activities.length - 1 ? "border-b border-[#e5e5e5]" : ""} py-3`}
+              className={`${
+                index !== activities.length - 1
+                  ? "border-b border-[#e5e5e5]"
+                  : ""
+              } py-3`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-[12px] font-medium text-[#1f1f1f]">{item.title}</p>
-                  <p className="mt-1 text-[11px] text-[#7a7a7a]">{item.time}</p>
+                  <p className="text-[12px] font-medium text-[#1f1f1f]">
+                    {item.title}
+                  </p>
+                  <p className="mt-1 text-[11px] text-[#7a7a7a]">
+                    {item.time}
+                  </p>
                 </div>
 
                 <p className="shrink-0 text-[11px] font-medium text-[#10b981]">
@@ -362,7 +435,9 @@ function ErrorState({ message, onRetry }) {
       <div className="flex items-start gap-3">
         <AlertCircle className="mt-0.5 h-5 w-5 text-red-500" />
         <div className="flex-1">
-          <h2 className="text-base font-semibold text-red-600">Gagal memuat dashboard</h2>
+          <h2 className="text-base font-semibold text-red-600">
+            Gagal memuat dashboard
+          </h2>
           <p className="mt-1 text-sm text-neutral-600">
             {message || "Terjadi kesalahan saat mengambil data dari server."}
           </p>
@@ -391,7 +466,7 @@ function EmptyState() {
       </p>
 
       <div className="mt-4">
-        <ProgressBar value={0} total={5} />
+        <ProgressBar value={0} total={0} />
       </div>
     </CardShell>
   );
@@ -403,6 +478,9 @@ export default function DashboardPage() {
   const [quizList, setQuizList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [selectedCertificate, setSelectedCertificate] = useState(null);
 
   const getBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL || "";
 
@@ -544,7 +622,9 @@ export default function DashboardPage() {
 
       const safeTasks = Array.isArray(tasksData) ? tasksData : [];
       const safeHistory = Array.isArray(historyData) ? historyData : [];
-      const safeAchievement = Array.isArray(achievementData) ? achievementData : [];
+      const safeAchievement = Array.isArray(achievementData)
+        ? achievementData
+        : [];
       const safeQuiz = Array.isArray(quizData) ? quizData : [];
 
       const normalizedTargets = safeTasks.slice(0, 3).map((item, index) => ({
@@ -579,6 +659,7 @@ export default function DashboardPage() {
         certificate: certificateSource
           ? {
               id: certificateSource?.certificate_id,
+              quizId: certificateSource?.id,
               category: certificateSource?.category || "Quiz",
               title: certificateSource?.title || "Sertifikat",
             }
@@ -642,41 +723,58 @@ export default function DashboardPage() {
     window.location.href = "/achievement";
   };
 
-  const handleDownloadCertificate = async () => {
+  const handleDownloadCertificate = () => {
     if (!mergedData?.certificate?.id) {
+      alert("Sertifikat belum tersedia");
+      return;
+    }
+
+    setSelectedCertificate(mergedData.certificate);
+    setShowCertificateModal(true);
+  };
+
+  const handleConfirmDownloadCertificate = async () => {
+    if (!selectedCertificate?.id) {
       alert("Sertifikat belum tersedia");
       return;
     }
 
     try {
       const baseUrl = getBaseUrl();
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
       const response = await fetch(
-        `${baseUrl}/api/v1/certificate/${mergedData.certificate.id}`,
+        `${baseUrl}/api/v1/certificate/${selectedCertificate.id}`,
         {
           method: "GET",
-          headers: getAuthHeaders(),
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
         }
       );
 
       if (!response.ok) {
-        throw new Error("Gagal mengunduh sertifikat");
+        throw new Error("Gagal mendownload sertifikat");
       }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
 
+      const link = document.createElement("a");
       link.href = url;
-      link.download = "certificate.pdf";
+      link.download = `${selectedCertificate.title || "sertifikat"}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
 
       window.URL.revokeObjectURL(url);
+
+      setShowCertificateModal(false);
+      setSelectedCertificate(null);
     } catch (err) {
-      console.error(err);
-      alert("File sertifikat gagal diunduh");
+      console.error("Download certificate error:", err);
+      alert(err?.message || "Gagal mendownload sertifikat.");
     }
   };
 
@@ -702,25 +800,34 @@ export default function DashboardPage() {
               </div>
 
               <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-                <div className="space-y-4">
+                <div className="flex flex-col">
                   <TargetSection
                     targets={mergedData.targets}
                     onToggleTarget={handleToggleTarget}
+                    onAddTarget={handleAddTarget}
                   />
 
-                  <StatsSection stats={mergedData.stats} />
+                  <div className="mt-5">
+                    <StatsSection stats={mergedData.stats} />
+                  </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="flex min-h-full flex-col">
                   <QuickActionSection
                     onViewAllQuiz={handleViewAllQuiz}
                     onViewAchievement={handleViewAchievement}
                   />
 
-                  <CertificateSection
-                    certificate={mergedData.certificate}
-                    onDownload={handleDownloadCertificate}
-                  />
+                  <div className="relative top-3 mt-4">
+
+                    <CertificateSection
+                      certificate={mergedData.certificate}
+                      onDownload={handleDownloadCertificate}
+                      onGoQuiz={handleStartQuiz}
+                    />
+                  </div>
+
+                  <div className="hidden flex-1 lg:block" />
                 </div>
               </div>
 
@@ -731,6 +838,59 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
+
+      {showCertificateModal && selectedCertificate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-[460px] rounded-md bg-white px-8 py-7 text-center shadow-xl">
+            <h2 className="text-[26px] font-bold text-black">
+              Klaim Sertifikat Anda!
+            </h2>
+
+            <p className="mt-4 text-[13px] font-semibold text-black">
+              Hampir Selesai! Validasi pencapaian Anda dalam:
+            </p>
+
+            <div className="mt-5 rounded-lg bg-gray-200 px-4 py-3">
+              <p className="text-[13px] font-bold italic text-black">
+                kuis: {selectedCertificate.category} - {selectedCertificate.title}
+              </p>
+            </div>
+
+            <p className="mt-5 text-[13px] font-medium leading-relaxed text-black">
+              Sertifikat Kompetensi Anda siap diunduh! Silahkan selesaikan
+              pembayaran biaya administrasi untuk mengaktifkan tautan unduhan.
+            </p>
+
+            <div className="mt-5 rounded-lg bg-gray-200 px-4 py-4">
+              <p className="text-[14px] font-semibold text-black">
+                Total Biaya:
+              </p>
+              <p className="mt-1 text-[26px] font-medium text-black">
+                Rp 45.000
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleConfirmDownloadCertificate}
+              className="mt-6 w-full rounded-md bg-red-500 py-3 text-[13px] font-bold text-white transition hover:bg-red-600"
+            >
+              Lanjut ke Pembayaran
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowCertificateModal(false);
+                setSelectedCertificate(null);
+              }}
+              className="mt-3 w-full rounded-md border border-red-500 bg-white py-3 text-[13px] font-bold text-red-500 transition hover:bg-red-50"
+            >
+              Kembali
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

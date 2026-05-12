@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { fetchWithAuth } from "@/lib/api";
 import {
   RefreshCw,
@@ -14,8 +14,10 @@ import {
   Loader2,
 } from "lucide-react";
 
-export default function QuizPage() {
+function QuizContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const certificateQuizId = searchParams.get("certificateQuizId");
 
   const [activeTab, setActiveTab] = useState("quiz");
   const [quizData, setQuizData] = useState(null);
@@ -28,6 +30,7 @@ export default function QuizPage() {
 
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [selectedCertificateQuiz, setSelectedCertificateQuiz] = useState(null);
+  const [animatedProgress, setAnimatedProgress] = useState(0);
 
   const fallbackData = {
     title: "Quiz & Latihan",
@@ -150,6 +153,20 @@ export default function QuizPage() {
     fetchQuizData();
   }, []);
 
+  useEffect(() => {
+    if (!certificateQuizId || allQuiz.length === 0) return;
+
+    const selectedQuiz = allQuiz.find(
+      (quiz) => String(quiz.id) === String(certificateQuizId)
+    );
+
+    if (selectedQuiz) {
+      setSelectedCertificateQuiz(selectedQuiz);
+      setShowCertificateModal(true);
+      router.replace("/quiz");
+    }
+  }, [certificateQuizId, allQuiz, router]);
+
   const handleStartQuiz = (quizId) => {
     if (!quizId && quizId !== 0) {
       alert("Quiz tidak valid.");
@@ -171,6 +188,16 @@ export default function QuizPage() {
       ? Math.min((data.completedQuiz / data.totalQuiz) * 100, 100)
       : 0;
 
+  useEffect(() => {
+    setAnimatedProgress(0);
+
+    const timer = setTimeout(() => {
+      setAnimatedProgress(progress);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [progress]);
+      
   const renderTabs = () => (
     <div className="mt-8 flex flex-wrap items-center gap-5">
       {tabs.map((tab) => {
@@ -199,24 +226,30 @@ export default function QuizPage() {
     const completedCount = quests.filter((quest) => quest.completed).length;
 
     return (
-      <div className="rounded-[18px] bg-gradient-to-r from-red-500 to-red-900 px-8 py-8 text-white sm:px-10">
-        <h2 className="text-[17px] font-bold">
-          {isDaily ? "Quest Hari Ini" : "Quest Minggu Ini"}
-        </h2>
+      <div className="relative overflow-hidden rounded-[18px] px-8 py-8 text-white sm:px-10">
+        <div className="absolute inset-0 animate-gradient bg-[linear-gradient(-45deg,#ff0000,#8B0000,#ff4d4d,#7f0000)] bg-[length:350%_350%]" />
 
-        <p className="mt-2 text-[14px] font-medium">
-          Selesaikan quest untuk mendapatkan XP dan reward!
-        </p>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_35%)]" />
 
-        <div className="mt-5 flex items-center gap-20">
-          <div>
-            <p className="text-[14px] font-semibold">Total Quest</p>
-            <p className="mt-3 text-[12px] font-bold">{quests.length}</p>
-          </div>
+        <div className="relative z-10">
+          <h2 className="text-[17px] font-bold">
+            {isDaily ? "Quest Hari Ini" : "Quest Minggu Ini"}
+          </h2>
 
-          <div>
-            <p className="text-[14px] font-semibold">Selesai</p>
-            <p className="mt-3 text-[12px] font-bold">{completedCount}</p>
+          <p className="mt-2 text-[14px] font-medium">
+            Selesaikan quest untuk mendapatkan XP dan reward!
+          </p>
+
+          <div className="mt-5 flex items-center gap-20">
+            <div>
+              <p className="text-[14px] font-semibold">Total Quest</p>
+              <p className="mt-3 text-[12px] font-bold">{quests.length}</p>
+            </div>
+
+            <div>
+              <p className="text-[14px] font-semibold">Selesai</p>
+              <p className="mt-3 text-[12px] font-bold">{completedCount}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -308,6 +341,53 @@ export default function QuizPage() {
     );
   };
 
+  const handleConfirmDownloadCertificate = async () => {
+    if (!selectedCertificateQuiz?.certificateId) {
+      alert("Sertifikat belum tersedia.");
+      return;
+    }
+
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+      const response = await fetch(
+        `${baseUrl}/api/v1/certificate/${selectedCertificateQuiz.certificateId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Gagal mendownload sertifikat.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${selectedCertificateQuiz.title || "sertifikat"}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      setShowCertificateModal(false);
+      setSelectedCertificateQuiz(null);
+    } catch (err) {
+      console.error("Download certificate error:", err);
+      alert(err?.message || "Gagal mendownload sertifikat.");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-white px-4 pt-6 pb-10 sm:px-8 lg:px-10">
       <section className="mx-auto w-full max-w-[1200px]">
@@ -355,8 +435,8 @@ export default function QuizPage() {
 
                   <div className="h-[13px] w-full overflow-hidden rounded-full bg-gray-200">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-red-500 via-orange-500 to-yellow-400"
-                      style={{ width: `${progress}%` }}
+                      className="h-full rounded-full bg-gradient-to-r from-red-500 via-orange-500 to-yellow-400 transition-all duration-1000 ease-out"
+                      style={{ width: `${animatedProgress}%` }}
                     />
                   </div>
                 </>
@@ -380,39 +460,45 @@ export default function QuizPage() {
                   <div className="mt-5 h-10 w-full animate-pulse rounded bg-white/30" />
                 </div>
               ) : recommendedQuiz ? (
-                <div className="rounded-[16px] bg-gradient-to-r from-red-500 to-red-900 px-10 py-7 text-white">
-                  <p className="text-[13px] font-medium">
-                    {recommendedQuiz.category}
-                  </p>
+                <div className="relative overflow-hidden rounded-[16px] px-10 py-7 text-white">
+                  <div className="absolute inset-0 animate-gradient bg-[linear-gradient(-45deg,#ff0000,#8B0000,#ff4d4d,#7f0000)] bg-[length:350%_350%]" />
 
-                  <h3 className="mt-1 text-[15px] font-bold">
-                    {recommendedQuiz.title}
-                  </h3>
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_35%)]" />
 
-                  <div className="mt-5 flex flex-wrap items-center gap-7 text-[12px] font-medium">
-                    <span className="flex items-center gap-1">
-                      <Clock size={13} className="text-white" />
-                      {recommendedQuiz.duration}
-                    </span>
+                  <div className="relative z-10">
+                    <p className="text-[13px] font-medium">
+                      {recommendedQuiz.category}
+                    </p>
 
-                    <span className="flex items-center gap-1">
-                      <Star size={11} className="fill-white text-white" />
-                      {recommendedQuiz.xp}
-                    </span>
+                    <h3 className="mt-1 text-[15px] font-bold">
+                      {recommendedQuiz.title}
+                    </h3>
 
-                    <span className="rounded-full bg-white/25 px-4 py-1">
-                      {recommendedQuiz.level}
-                    </span>
+                    <div className="mt-5 flex flex-wrap items-center gap-7 text-[12px] font-medium">
+                      <span className="flex items-center gap-1">
+                        <Clock size={13} className="text-white" />
+                        {recommendedQuiz.duration}
+                      </span>
+
+                      <span className="flex items-center gap-1">
+                        <Star size={11} className="fill-white text-white" />
+                        {recommendedQuiz.xp}
+                      </span>
+
+                      <span className="rounded-full bg-white/25 px-4 py-1">
+                        {recommendedQuiz.level}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStartQuiz(recommendedQuiz.id)}
+                      className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-white py-3 text-[13px] font-bold text-red-500"
+                    >
+                      Mulai Quiz
+                      <Play size={15} className="fill-red-500 text-red-500" />
+                    </button>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleStartQuiz(recommendedQuiz.id)}
-                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-white py-3 text-[13px] font-bold text-red-500"
-                  >
-                    Mulai Quiz
-                    <Play size={15} className="fill-red-500 text-red-500" />
-                  </button>
                 </div>
               ) : (
                 <div className="rounded-[16px] border border-gray-200 bg-white px-10 py-7 text-sm text-gray-500 shadow">
@@ -575,12 +661,7 @@ export default function QuizPage() {
 
             <button
               type="button"
-              onClick={() => {
-                setShowCertificateModal(false);
-                router.push(
-                  `/payment/certificate?quizId=${selectedCertificateQuiz.id}`
-                );
-              }}
+              onClick={handleConfirmDownloadCertificate}
               className="mt-6 w-full rounded-md bg-red-500 py-3 text-[13px] font-bold text-white transition hover:bg-red-600"
             >
               Lanjut ke Pembayaran
@@ -600,5 +681,13 @@ export default function QuizPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function QuizPage() {
+  return (
+    <Suspense fallback={null}>
+      <QuizContent />
+    </Suspense>
   );
 }

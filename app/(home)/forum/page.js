@@ -390,15 +390,22 @@ export default function Page() {
     );
   };
 
-    const renderRoomButton = (room) => {
-      const isFull = room.currentParticipants >= room.maxParticipants;
+  const renderRoomButton = (room) => {
+    const currentParticipants = Number(room.currentParticipants || 0);
+    const maxParticipants = Number(room.maxParticipants || 0);
 
-      const isOwner = isRoomOwner(room);
+    const isFull =
+      maxParticipants > 0 &&
+      currentParticipants >= maxParticipants;
 
-      const canOpenChat =
-        room.isJoined === true || isOwner === true;
+    const isOwner = isRoomOwner(room);
 
-    if (canOpenChat) {
+    const isJoined =
+      room.isJoined === true ||
+      isOwner === true;
+
+    // OWNER ATAU SUDAH JOIN
+    if (isJoined) {
       return (
         <button
           type="button"
@@ -410,6 +417,7 @@ export default function Page() {
       );
     }
 
+    // ROOM PENUH
     if (isFull) {
       return (
         <button
@@ -422,6 +430,7 @@ export default function Page() {
       );
     }
 
+    // BELUM JOIN
     return (
       <button
         type="button"

@@ -9,7 +9,7 @@ export default function SignInPage() {
   const router = useRouter();
 
   const [form, setForm] = useState({
-    email: "",
+    emailOrUsername: "",
     password: "",
   });
 
@@ -33,18 +33,28 @@ export default function SignInPage() {
   };
 
   const validateForm = () => {
-    if (!form.email.trim() || !form.password.trim()) {
-      setErrorMessage("Email dan password wajib diisi.");
-      return false;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) {
-      setErrorMessage("Format email tidak valid.");
+    if (!form.emailOrUsername.trim() || !form.password.trim()) {
+      setErrorMessage("Email/username dan password wajib diisi.");
       return false;
     }
 
     return true;
+  };
+
+  const getErrorMessage = (data) => {
+    if (!data) return "Terjadi kesalahan saat sign in.";
+
+    if (Array.isArray(data?.detail)) {
+      return data.detail
+        .map((item) => item?.msg)
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    if (typeof data?.detail === "string") return data.detail;
+    if (typeof data?.message === "string") return data.message;
+
+    return "Terjadi kesalahan saat sign in.";
   };
 
   const handleSubmit = async (e) => {
@@ -70,7 +80,7 @@ export default function SignInPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: form.email.trim(),
+          email_or_username: form.emailOrUsername.trim(),
           password: form.password,
         }),
         signal: controller.signal,
@@ -86,12 +96,7 @@ export default function SignInPage() {
       }
 
       if (!response.ok) {
-        const message =
-          data?.detail?.[0]?.msg ||
-          data?.message ||
-          data?.detail ||
-          "Terjadi kesalahan saat sign in.";
-        throw new Error(message);
+        throw new Error(getErrorMessage(data));
       }
 
       if (typeof window !== "undefined") {
@@ -104,7 +109,7 @@ export default function SignInPage() {
       setSuccessMessage("Sign in berhasil.");
 
       setForm({
-        email: "",
+        emailOrUsername: "",
         password: "",
       });
 
@@ -128,9 +133,7 @@ export default function SignInPage() {
             "API gagal merespons. Silakan coba beberapa saat lagi."
           );
         } else {
-          setErrorMessage(
-            error?.message || "Terjadi kesalahan saat sign in."
-          );
+          setErrorMessage(error?.message || "Terjadi kesalahan saat sign in.");
         }
       }
     } finally {
@@ -172,18 +175,17 @@ export default function SignInPage() {
           <form onSubmit={handleSubmit} className="flex flex-col">
             <div className="mb-6">
               <label
-                htmlFor="email"
+                htmlFor="emailOrUsername"
                 className="mb-3 block text-[18px] font-medium text-[#6f6f6f] sm:text-[20px]"
               >
-                Email
+                Email / Username
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                value={form.email}
+                id="emailOrUsername"
+                name="emailOrUsername"
+                type="text"
+                autoComplete="username"
+                value={form.emailOrUsername}
                 onChange={handleChange}
                 disabled={loading}
                 className="h-[54px] w-full rounded-[14px] border border-[#c9c9c9] bg-transparent px-4 text-[16px] text-[#353535] outline-none transition focus:border-[#9d9d9d] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[56px] sm:text-[18px]"

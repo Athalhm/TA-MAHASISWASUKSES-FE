@@ -42,20 +42,76 @@ export default function Page() {
     description: "",
   });
 
-  const getBaseUrl = () => process.env.NEXT_PUBLIC_API_BASE_URL || "";
+  const categoryToApi = (category) => {
+    const value = String(category).toLowerCase();
 
-  const getAuthHeaders = () => {
-    if (typeof window === "undefined") {
-      return {
-        "Content-Type": "application/json",
-      };
-    }
+    if (value === "akademik") return "akademik";
+    if (value === "pribadi") return "pribadi";
+    if (value === "organisasi") return "organisasi";
 
-    const token = localStorage.getItem("token");
+    return "akademik";
+  };
 
+  const categoryToLabel = (category) => {
+    const value = String(category).toLowerCase();
+
+    if (value === "akademik") return "Akademik";
+    if (value === "pribadi") return "Pribadi";
+    if (value === "organisasi") return "Organisasi";
+
+    return "Akademik";
+  };
+
+  const priorityToApi = (difficulty) => {
+    if (difficulty === "hard") return "tinggi";
+    if (difficulty === "medium") return "sedang";
+    return "rendah";
+  };
+
+  const priorityToUi = (priority) => {
+    const value = String(priority).toLowerCase();
+
+    if (value === "tinggi") return "high";
+    if (value === "sedang") return "medium";
+    if (value === "rendah") return "low";
+
+    return "medium";
+  };
+
+  const formatDeadlineForInput = (value) => {
+    if (!value) return "";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    return date.toISOString().slice(0, 10);
+  };
+
+  const formatDeadlineForDisplay = (value) => {
+    if (!value) return "-";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const normalizeTask = (task) => {
     return {
-      "Content-Type": "application/json",
-      Authorization: token ? `Bearer ${token}` : "",
+      ...task,
+      id: task?.id,
+      title: task?.title || "Tugas Tanpa Judul",
+      description: task?.description || "",
+      category: categoryToLabel(task?.category),
+      priority: priorityToUi(task?.priority),
+      deadline: task?.deadline || "",
+      deadlineText: formatDeadlineForDisplay(task?.deadline),
+      status: task?.is_completed ? "selesai" : "todo",
+      isCompleted: Boolean(task?.is_completed),
     };
   };
 
@@ -64,49 +120,29 @@ export default function Page() {
       setLoading(true);
       setErrorMessage("");
 
-      const baseUrl = getBaseUrl();
-
-      const [tasksRes, summaryRes] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/progress-tracking/tasks`, {
+      const [tasksData, summaryData] = await Promise.all([
+        fetchWithAuth("/api/v1/progress-tracking/tasks", {
           method: "GET",
-          headers: getAuthHeaders(),
+          cache: "no-store",
         }),
-        fetch(`${baseUrl}/api/v1/progress-tracking/summary`, {
+        fetchWithAuth("/api/v1/progress-tracking/summary", {
           method: "GET",
-          headers: getAuthHeaders(),
+          cache: "no-store",
         }),
       ]);
 
-      if (!tasksRes.ok || !summaryRes.ok) {
-        throw new Error("Gagal mengambil data target dan tugas.");
-      }
-
-      const tasksData = await tasksRes.json();
-      const summaryData = await summaryRes.json();
-
       const normalizedTasks = Array.isArray(tasksData)
-        ? tasksData.map((task) => ({
-            ...task,
-            status: task.is_completed
-              ? "done"
-              : "todo",
-            priority:
-              task.priority === "tinggi"
-                ? "high"
-                : task.priority === "rendah"
-                ? "low"
-                : "medium",
-          }))
+        ? tasksData.map(normalizeTask)
         : [];
 
       setTasks(normalizedTasks);
-      setSummary({
-        completed: summaryData.task_completed || 0,
-        total: summaryData.todo || 0,
-        progress: summaryData.on_progress || 0,
-        highPriority: summaryData.high_priority || 0,
-      });
 
+      setSummary({
+        completed: Number(summaryData?.task_completed || 0),
+        total: Number(summaryData?.todo || 0),
+        progress: Number(summaryData?.on_progress || 0),
+        highPriority: Number(summaryData?.high_priority || 0),
+      });
     } catch (error) {
       console.error(error);
       setErrorMessage(error?.message || "Data target dan tugas gagal dimuat.");
@@ -173,29 +209,21 @@ export default function Page() {
     }
 
     const payload = {
-      title: formData.title,
-      category: formData.category,
-      deadline: formData.deadline,
-      difficulty: formData.difficulty,
-      description: formData.description,
-      status: "todo",
+      title: formData.title.trim(),
+      category: categoryToApi(formData.category),
+      priority: priorityToApi(formData.difficulty),
+      deadline: new Date(formData.deadline).toISOString(),
+      description: formData.description.trim() || null,
     };
 
     try {
       setSubmitting(true);
       setErrorMessage("");
 
-      const baseUrl = getBaseUrl();
-
-      const response = await fetch(`${baseUrl}/api/targets-tugas`, {
+      await fetchWithAuth("/api/v1/progress-tracking/tasks", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        throw new Error("Gagal menambahkan tugas.");
-      }
 
       await fetchTasks();
       handleCloseModal();
@@ -204,6 +232,24 @@ export default function Page() {
       setErrorMessage(error?.message || "Gagal menambahkan tugas.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleToggleTaskProgress = async (task) => {
+    try {
+      const nextProgress = task.isCompleted ? "todo" : "selesai";
+
+      await fetchWithAuth(
+        `/api/v1/progress-tracking/tasks/${task.id}/update_progress/${nextProgress}`,
+        {
+          method: "POST",
+        }
+      );
+
+      await fetchTasks();
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error?.message || "Gagal memperbarui progress tugas.");
     }
   };
 
@@ -250,15 +296,15 @@ export default function Page() {
     let matchesFilter = true;
 
     if (activeFilter === "todo") {
-      matchesFilter = status === "todo" || status === "draft";
+      matchesFilter = status === "todo";
     } else if (activeFilter === "progress") {
       matchesFilter =
         status === "progress" ||
         status === "proses" ||
         status === "on progress";
-    } else if (activeFilter === "done") {
-      matchesFilter = status === "done" || status === "selesai";
-    }
+        } else if (activeFilter === "done") {
+          matchesFilter = status === "selesai";
+        }
 
     return matchesSearch && matchesFilter;
   });
@@ -279,6 +325,13 @@ export default function Page() {
     }
 
     return "border-slate-200 bg-slate-100 text-slate-600";
+  };
+
+  const getPriorityLabel = (priority) => {
+    if (priority === "high") return "High";
+    if (priority === "medium") return "Medium";
+    if (priority === "low") return "Low";
+    return "Normal";
   };
 
   const renderTaskList = () => {
@@ -321,9 +374,7 @@ export default function Page() {
     return (
       <div className="space-y-4">
         {filteredTasks.map((task, index) => {
-          const status = task?.status?.toLowerCase() || "";
-          const isCompleted =
-            task?.isCompleted || status === "done" || status === "selesai";
+          const isCompleted = Boolean(task?.isCompleted);
 
           return (
             <article
@@ -332,15 +383,22 @@ export default function Page() {
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleTaskProgress(task)}
+                    className="pt-1"
+                  >
                     {isCompleted ? (
                       <div className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#08b45c]">
-                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+                        <Check
+                          className="h-3.5 w-3.5 text-white"
+                          strokeWidth={3}
+                        />
                       </div>
                     ) : (
                       <span className="block h-[18px] w-[18px] rounded-full border border-[#d5d5d5] bg-[#efefef]" />
                     )}
-                  </div>
+                  </button>
 
                   <div className="min-w-0">
                     <h3 className="text-[15px] font-semibold leading-none text-[#202020]">
@@ -353,12 +411,12 @@ export default function Page() {
                     <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
                       <div className="flex items-center gap-1.5 text-[11px] text-[#ff4a4a]">
                         <Clock3 className="h-3.5 w-3.5" />
-                        <span>{task.deadline || "-"}</span>
+                        <span>{task.deadlineText || "-"}</span>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-[11px] text-[#8c8c8c]">
                         <Tag className="h-3.5 w-3.5" />
-                        <span>{task.category || "Tugas Kuliah"}</span>
+                        <span>{task.category || "Akademik"}</span>
                       </div>
                     </div>
                   </div>
@@ -370,9 +428,7 @@ export default function Page() {
                       task.priority
                     )}`}
                   >
-                    {task.priority
-                      ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1)
-                      : "Normal"}
+                    {getPriorityLabel(task.priority)}
                   </span>
                 </div>
               </div>
@@ -392,7 +448,9 @@ export default function Page() {
               <div className="mb-5 flex items-start gap-3 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
                 <div className="flex-1">
-                  <p className="font-medium">Terjadi masalah saat memuat data.</p>
+                  <p className="font-medium">
+                    Terjadi masalah saat memuat data.
+                  </p>
                   <p>{errorMessage}</p>
                 </div>
                 <button
@@ -512,7 +570,9 @@ export default function Page() {
                   <input
                     type="text"
                     value={formData.title}
-                    onChange={(e) => handleInputChange("title", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("title", e.target.value)
+                    }
                     placeholder="Contoh : Tugas besar algoritma pemograman"
                     className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#222] outline-none placeholder:text-[#9b9b9b] focus:border-[#ff4d4f]"
                   />
@@ -536,7 +596,9 @@ export default function Page() {
                         <button
                           key={item.label}
                           type="button"
-                          onClick={() => handleInputChange("category", item.label)}
+                          onClick={() =>
+                            handleInputChange("category", item.label)
+                          }
                           className={`flex min-h-[80px] flex-col items-center justify-center rounded-2xl border transition ${
                             isActive
                               ? "border-[#ff4d4f] bg-[#fff1f1]"
@@ -565,7 +627,9 @@ export default function Page() {
                     <input
                       type="date"
                       value={formData.deadline}
-                      onChange={(e) => handleInputChange("deadline", e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("deadline", e.target.value)
+                      }
                       className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#666] outline-none focus:border-[#ff4d4f]"
                     />
                   </div>
@@ -606,15 +670,18 @@ export default function Page() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-semibold text-[#222]">  
+                  <label className="mb-2 block text-sm font-semibold text-[#222]">
                     Deskripsi (Optional)
                   </label>
                   <textarea
                     rows={3}
                     value={formData.description}
-                    onChange={(e) => handleInputChange("description", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("description", e.target.value)
+                    }
                     placeholder="Catatan Tambahan"
-                    className="w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 py-4 text-sm text-[#222] outline-none placeholder:text-[#9c9c9c] focus:border-[#ff4d4f]"/>
+                    className="w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 py-4 text-sm text-[#222] outline-none placeholder:text-[#9c9c9c] focus:border-[#ff4d4f]"
+                  />
                 </div>
 
                 <div className="flex flex-col-reverse gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
@@ -629,7 +696,7 @@ export default function Page() {
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#ff1f28] px-8 text-smm font-semibold text-white transition hover:bg-[#e61b23] disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-[128px]"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#ff1f28] px-8 text-sm font-semibold text-white transition hover:bg-[#e61b23] disabled:cursor-not-allowed disabled:opacity-70 sm:min-w-[128px]"
                   >
                     {submitting ? "Menyimpan..." : "Tambah"}
                   </button>

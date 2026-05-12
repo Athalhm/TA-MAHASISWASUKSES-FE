@@ -9,6 +9,7 @@ export default function SignUpPage() {
   const initialForm = useMemo(
     () => ({
       fullName: "",
+      username: "",
       email: "",
       phone: "",
       nim: "",
@@ -49,6 +50,12 @@ export default function SignUpPage() {
       errors.fullName = "Nama lengkap wajib diisi.";
     } else if (form.fullName.trim().length < 3) {
       errors.fullName = "Nama lengkap minimal 3 karakter.";
+    }
+
+    if (!form.username.trim()) {
+      errors.username = "Username wajib diisi.";
+    } else if (form.username.trim().length < 3) {
+      errors.username = "Username minimal 3 karakter.";
     }
 
     if (!form.email.trim()) {
@@ -102,6 +109,7 @@ export default function SignUpPage() {
         },
         body: JSON.stringify({
           email: form.email.trim(),
+          username: form.username.trim(),
           password: form.password,
           phone_number: form.phone.trim(),
           nim: form.nim.trim(),
@@ -233,6 +241,33 @@ export default function SignUpPage() {
                       {fieldErrors.fullName ? (
                         <p className="mt-2 text-sm text-red-500">
                           {fieldErrors.fullName}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="username"
+                        className="mb-2 block text-[18px] font-medium text-[#6e6e6e]"
+                      >
+                        Username
+                      </label>
+                      <input
+                        id="username"
+                        name="username"
+                        type="text"
+                        autoComplete="username"
+                        value={form.username}
+                        onChange={handleChange}
+                        className={`h-[54px] w-full rounded-2xl border bg-transparent px-5 text-base text-[#2f2f2f] outline-none transition ${
+                          fieldErrors.username
+                            ? "border-red-300 focus:border-red-400"
+                            : "border-[#cfcfcf] focus:border-[#a8a8a8]"
+                        }`}
+                      />
+                      {fieldErrors.username ? (
+                        <p className="mt-2 text-sm text-red-500">
+                          {fieldErrors.username}
                         </p>
                       ) : null}
                     </div>

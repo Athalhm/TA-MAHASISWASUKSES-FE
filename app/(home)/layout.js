@@ -12,10 +12,9 @@ import {
   Trophy,
   Target,
   ChevronDown,
-  CircleUserRound,
   Coins,
   RefreshCcw,
-  SlidersHorizontal,
+  User,
   LogOut,
 } from "lucide-react";
 
@@ -23,6 +22,13 @@ export default function RootLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
   const profileMenuRef = useRef(null);
+  const heartbeatRef = useRef(false);
+  const navContainerRef = useRef(null);
+  const navItemRefs = useRef({});
+  const [activeIndicator, setActiveIndicator] = useState({
+    left: 0,
+    width: 0,
+  });
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -30,6 +36,8 @@ export default function RootLayout({ children }) {
   const [xp, setXp] = useState(0);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(Date.now());
 
   const menus = [
     { name: "Dashboard", icon: House, href: "/dashboard" },
@@ -40,91 +48,149 @@ export default function RootLayout({ children }) {
     { name: "Target dan Tugas", icon: Target, href: "/target-dan-tugas" },
   ];
 
+  const getInitials = (name = "User") => {
+    return name
+      .split(" ")
+      .map((word) => word[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+  };
+
+  const getAvatarColor = (userKey = "user") => {
+    const colors = [
+      "bg-blue-500",
+      "bg-red-500",
+      "bg-purple-500",
+      "bg-green-500",
+      "bg-orange-500",
+      "bg-indigo-500",
+    ];
+
+    let hash = 0;
+    const key = String(userKey);
+
+    for (let i = 0; i < key.length; i++) {
+      hash = key.charCodeAt(i) + ((hash << 5) - hash);
+    }
+
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const getAvatarUrl = (userId, version = Date.now()) => {
+    if (!userId) return "";
+
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+    return `${baseUrl}/api/v1/user/avatar/${userId}?v=${version}`;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("token_type");
+    localStorage.removeItem("user");
+
+    setUser(null);
+    setXp(0);
+    setAvatarError(false);
+    setIsProfileOpen(false);
+
+    router.replace("/sign-in");
+  };
+
+  const isAuthError = (err) => {
+    const message = String(err?.message || "").toLowerCase();
+
+    return (
+      message.includes("401") ||
+      message.includes("jwt") ||
+      message.includes("expired") ||
+      message.includes("unauthorized") ||
+      message.includes("not authenticated")
+    );
+  };
+
   const fetchLayoutData = async () => {
     try {
       setLoading(true);
       setError("");
+      setAvatarError(false);
 
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+      if (!token) {
+        handleLogout();
+        return;
+      }
 
-      const [profileResponse, gamificationResponse] = await Promise.all([
-        fetch(`${baseUrl}/api/v1/user/profile`, {
+      try {
+        const profileData = await fetchWithAuth("/api/v1/user/profile", {
           method: "GET",
           cache: "no-store",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }),
-        fetch(`${baseUrl}/api/v1/gamification/summary`, {
-          method: "GET",
-          cache: "no-store",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        }),
-      ]);
+        });
 
-      if (!profileResponse.ok) {
-        let message = "Gagal mengambil data profile";
+        setUser(profileData || null);
+        setAvatarVersion(Date.now());
+      } catch (err) {
+        if (isAuthError(err)) {
+          handleLogout();
+          return;
+        }
 
-        try {
-          const errorData = await profileResponse.json();
-          message =
-            errorData?.message ||
-            errorData?.detail ||
-            `${message} (${profileResponse.status})`;
-        } catch {}
-
-        throw new Error(message);
+        setError("Data profil gagal dimuat sementara.");
       }
 
-      if (!gamificationResponse.ok) {
-        let message = "Gagal mengambil data gamification summary";
+      try {
+        const gamificationData = await fetchWithAuth(
+          "/api/v1/gamification/summary",
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
 
-        try {
-          const errorData = await gamificationResponse.json();
-          message =
-            errorData?.message ||
-            errorData?.detail ||
-            `${message} (${gamificationResponse.status})`;
-        } catch {}
+        setXp(Number(gamificationData?.total_xp_earned || 0));
+      } catch (err) {
+        if (isAuthError(err)) {
+          handleLogout();
+          return;
+        }
 
-        throw new Error(message);
+        setXp(0);
       }
-
-      const profileData = await profileResponse.json();
-      const gamificationData = await gamificationResponse.json();
-
-      setUser(profileData || null);
-
-      if (profileData) {
-        localStorage.setItem("user", JSON.stringify(profileData));
-      }
-
-      setXp(gamificationData?.total_xp_earned ?? 0);
     } catch (err) {
       console.error("Layout fetch error:", err);
-      setError(err.message || "Terjadi kesalahan");
 
-      const savedUser =
-        typeof window !== "undefined" ? localStorage.getItem("user") : null;
-
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch {
-          setUser(null);
-        }
+      if (isAuthError(err)) {
+        handleLogout();
+        return;
       }
 
-      setXp((prev) => prev ?? 0);
+      setError("Data layout gagal dimuat sementara.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendHeartbeat = async () => {
+    if (heartbeatRef.current) return;
+
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      if (!token) return;
+
+      heartbeatRef.current = true;
+
+      await fetchWithAuth("/api/v1/gamification/heartbeat", {
+        method: "POST",
+      });
+    } catch (err) {
+      console.error("Heartbeat error:", err);
+    } finally {
+      heartbeatRef.current = false;
     }
   };
 
@@ -133,8 +199,28 @@ export default function RootLayout({ children }) {
   }, []);
 
   useEffect(() => {
+    const activeItem = menus.find((item) => pathname === item.href);
+    const activeElement = activeItem ? navItemRefs.current[activeItem.href] : null;
+
+    if (!activeElement) return;
+
+    setActiveIndicator({
+      left: activeElement.offsetLeft,
+      width: activeElement.offsetWidth,
+    });
+  }, [pathname]);
+
+  useEffect(() => {
     if (!mounted) return;
+
     fetchLayoutData();
+    sendHeartbeat();
+
+    const interval = setInterval(() => {
+      sendHeartbeat();
+    }, 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, [mounted]);
 
   useEffect(() => {
@@ -154,25 +240,18 @@ export default function RootLayout({ children }) {
     };
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("token_type");
-    localStorage.removeItem("user");
-
-    setIsProfileOpen(false);
-    router.push("/sign-in");
-  };
-
-  const displayName = user?.full_name || "Pengguna";
+  const displayName = user?.full_name || user?.username || "Pengguna";
+  const displayUsername = user?.username || "Pengguna";
   const displayEmail = user?.email || "pengguna@gmail.com";
-  const displayAvatar = user?.avatar || null;
   const displayXp = new Intl.NumberFormat("en-US").format(Number(xp ?? 0));
+
+  const avatarUrl =
+    user?.id && !avatarError ? getAvatarUrl(user.id, avatarVersion) : "";
 
   return (
     <div className="min-h-screen w-full bg-[#efefef] text-[#191919] antialiased">
       <div className="min-h-screen w-full">
-        <header className="w-full border-x border-t border-b border-[#242424] bg-[#f3f3f3]">
+        <header className="w-full border-x border-t border-b border-[#bdbdbd] bg-[#f3f3f3]">
           <div className="flex min-h-[72px] w-full items-center justify-between px-10">
             <div className="flex items-center gap-4">
               <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-gradient-to-b from-[#ff2338] to-[#8b0c12]">
@@ -212,22 +291,31 @@ export default function RootLayout({ children }) {
                   className="flex h-[42px] min-w-[240px] items-center justify-between rounded-[14px] border border-[#cfcfcf] bg-[#f5f5f5] px-4 shadow-[0_0_0_1px_rgba(0,0,0,0.01)]"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d8def7]">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
                       {loading ? (
                         <div className="h-7 w-7 animate-pulse rounded-full bg-[#cfd5ef]" />
-                      ) : displayAvatar ? (
+                      ) : avatarUrl ? (
                         <img
-                          src={displayAvatar}
+                          src={avatarUrl}
                           alt={displayName}
                           className="h-full w-full object-cover"
+                          onError={() => {
+                            setAvatarError(true);
+                          }}
                         />
                       ) : (
-                        <CircleUserRound size={18} className="text-[#5d6b95]" />
+                        <div
+                          className={`flex h-full w-full items-center justify-center text-[11px] font-bold text-white ${getAvatarColor(
+                            user?.id || user?.email || displayName
+                          )}`}
+                        >
+                          {getInitials(displayName)}
+                        </div>
                       )}
                     </div>
 
                     <span className="truncate text-[14px] font-medium text-[#212121]">
-                      {loading ? "Loading..." : displayName}
+                      {loading ? "Loading..." : displayUsername}
                     </span>
                   </div>
 
@@ -240,21 +328,32 @@ export default function RootLayout({ children }) {
                   />
                 </button>
 
-                {isProfileOpen && (
-                  <div className="absolute right-0 top-[50px] z-50 w-[240px] rounded-[24px] border border-[#d5d5d5] bg-[#f5f5f5] px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)]">
+                  <div
+                    className={`absolute right-0 top-[50px] z-50 w-[240px] rounded-[24px] border border-[#d5d5d5] bg-[#f5f5f5] px-4 py-3 shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition-all duration-200 ease-out ${
+                      isProfileOpen
+                        ? "pointer-events-auto translate-y-0 opacity-100"
+                        : "pointer-events-none -translate-y-2 opacity-0"
+                    }`}
+                  >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#d8def7]">
-                        {displayAvatar ? (
+                      <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-full">
+                        {avatarUrl ? (
                           <img
-                            src={displayAvatar}
+                            src={avatarUrl}
                             alt={displayName}
                             className="h-full w-full object-cover"
+                            onError={() => {
+                              setAvatarError(true);
+                            }}
                           />
                         ) : (
-                          <CircleUserRound
-                            size={30}
-                            className="text-[#5d6b95]"
-                          />
+                          <div
+                            className={`flex h-full w-full items-center justify-center text-[15px] font-bold text-white ${getAvatarColor(
+                              user?.id || user?.email || displayName
+                            )}`}
+                          >
+                            {getInitials(displayName)}
+                          </div>
                         )}
                       </div>
 
@@ -262,6 +361,7 @@ export default function RootLayout({ children }) {
                         <p className="truncate text-[15px] font-medium text-[#1f1f1f]">
                           {displayName}
                         </p>
+
                         <p className="mt-1 truncate text-[13px] text-[#9b9b9b]">
                           {displayEmail}
                         </p>
@@ -276,12 +376,11 @@ export default function RootLayout({ children }) {
                         setIsProfileOpen(false);
                         router.push("/profile");
                       }}
-                      className="flex w-full items-center gap-3 py-2 text-left text-[#111] transition hover:opacity-80"
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-[#111] transition-all duration-200 hover:translate-x-1 hover:bg-white/70 hover:text-[#ff3d4a]"
                     >
-                      <SlidersHorizontal size={18} strokeWidth={2.1} />
-                      <span className="text-[15px] font-medium">
-                        Edit Profile
-                      </span>
+                      <User size={18} strokeWidth={2.1} />
+
+                      <span className="text-[15px] font-medium">Profile</span>
                     </button>
 
                     <div className="my-2 h-px w-full bg-[#d8d8d8]" />
@@ -289,13 +388,13 @@ export default function RootLayout({ children }) {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-3 py-2 text-left text-[#111] transition hover:opacity-80"
+                      className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left text-[#111] transition-all duration-200 hover:translate-x-1 hover:bg-white/70 hover:text-[#ff3d4a]"
                     >
                       <LogOut size={18} strokeWidth={2.1} />
+
                       <span className="text-[15px] font-medium">Keluar</span>
                     </button>
                   </div>
-                )}
               </div>
             </div>
           </div>
@@ -303,9 +402,7 @@ export default function RootLayout({ children }) {
           {error && (
             <div className="border-t border-[#d9b3b8] bg-[#fff1f3] px-10 py-2">
               <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#b5475a]">
-                <p>
-                  Data header gagal dimuat. Menampilkan data fallback sementara.
-                </p>
+                <p>{error}</p>
 
                 <button
                   type="button"
@@ -322,7 +419,18 @@ export default function RootLayout({ children }) {
 
         <nav className="w-full border-x border-b border-[#bdbdbd] bg-[#f8f8f8]">
           <div className="w-full overflow-x-auto px-[52px]">
-            <div className="flex min-w-max items-center gap-8">
+            <div
+              ref={navContainerRef}
+              className="relative flex min-w-max items-center gap-8"
+            >
+              <span
+                className="absolute bottom-0 h-[2px] rounded-full bg-[#ff3d4a] transition-all duration-300 ease-in-out"
+                style={{
+                  left: `${activeIndicator.left}px`,
+                  width: `${activeIndicator.width}px`,
+                }}
+              />
+
               {menus.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
@@ -331,10 +439,13 @@ export default function RootLayout({ children }) {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`relative flex h-[52px] items-center gap-2 whitespace-nowrap border-b-2 px-1 text-[16px] font-medium tracking-[-0.02em] transition ${
+                    ref={(element) => {
+                      navItemRefs.current[item.href] = element;
+                    }}
+                    className={`relative flex h-[52px] items-center gap-2 whitespace-nowrap px-1 text-[16px] font-medium tracking-[-0.02em] transition ${
                       isActive
-                        ? "border-[#ff3d4a] text-[#ff3d4a]"
-                        : "border-transparent text-[#191919] hover:text-[#ff3d4a]"
+                        ? "text-[#ff3d4a]"
+                        : "text-[#191919] hover:text-[#ff3d4a]"
                     }`}
                   >
                     <Icon size={20} strokeWidth={2} />
@@ -345,8 +456,7 @@ export default function RootLayout({ children }) {
             </div>
           </div>
         </nav>
-
-        <main className="min-h-[calc(100vh-124px)] border-x border-[#242424] bg-[#efefef] px-0 py-0">
+        <main className="min-h-[calc(100vh-124px)] border-x border-[#bdbdbd] bg-[#efefef] px-0 py-0">
           {children}
         </main>
       </div>

@@ -119,7 +119,7 @@ export default function QuizPage() {
       setQuestion(startData?.first_question || null);
 
       const firstNumber = startData?.first_question?.current_number || 1;
-      setSelectedAnswer(answers[firstNumber] || "");
+      setSelectedAnswer(answers[String(startData?.first_question?.id)] || "");
     } catch (err) {
       console.error("Start quiz error:", err);
       setError(err?.message || "Quiz gagal dimuat.");
@@ -143,7 +143,7 @@ export default function QuizPage() {
 
       setQuestion(data);
       setCurrentQuestion(Number(data?.current_number || questionNumber));
-      setSelectedAnswer(answers[questionNumber] || "");
+      setSelectedAnswer(answers[String(data?.id)] || "");
     } catch (err) {
       console.error("Fetch question error:", err);
       setError(err?.message || "Soal gagal dimuat.");
@@ -157,7 +157,7 @@ export default function QuizPage() {
 
     setAnswers((prev) => ({
       ...prev,
-      [currentQuestion]: value,
+      [String(question?.id)]: value,
     }));
   }
 
@@ -219,20 +219,7 @@ export default function QuizPage() {
   }
 
   async function handleGenerateCertificate() {
-    try {
-      const result = await fetchWithAuth(
-        `/api/v1/quiz/${quizId}/certificate`,
-        {
-          method: "POST",
-        }
-      );
-
-      setCertificateId(result?.certificate_id || null);
-      alert("Sertifikat berhasil dibuat.");
-    } catch (err) {
-      console.error("Generate certificate error:", err);
-      alert(err?.message || "Gagal membuat sertifikat.");
-    }
+    router.push(`/quiz?certificateQuizId=${quizId}`);
   }
 
   const displayData = {
