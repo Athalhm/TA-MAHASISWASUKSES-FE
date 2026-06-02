@@ -82,6 +82,9 @@ export default function SignUpPage() {
       errors.password = "Password wajib diisi.";
     } else if (form.password.length < 8) {
       errors.password = "Password minimal 8 karakter.";
+    } else if (!/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/.test(form.password)) {
+      errors.password =
+        "Password harus memiliki minimal satu huruf, satu angka, dan satu karakter spesial.";
     }
 
     return errors;
@@ -127,11 +130,29 @@ export default function SignUpPage() {
       }
 
       if (!response.ok) {
-        const message =
+        let message =
           result?.detail?.[0]?.msg ||
           result?.message ||
           result?.detail ||
           "Pendaftaran gagal. Silakan coba lagi.";
+
+        if (typeof message === "string") {
+          const lowerMessage = message.toLowerCase();
+
+          if (lowerMessage.includes("password must contain")) {
+            message =
+              "Password harus memiliki minimal satu huruf, satu angka, dan satu karakter spesial.";
+          } else if (lowerMessage.includes("users_nim_key")) {
+            message = "NIM sudah terdaftar.";
+          } else if (lowerMessage.includes("users_email_key")) {
+            message = "Email sudah digunakan.";
+          } else if (lowerMessage.includes("users_user_name_key")) {
+            message = "Username sudah digunakan.";
+          } else if (lowerMessage.includes("user already registered")) {
+            message = "Email sudah terdaftar.";
+          }
+        }
+
         throw new Error(message);
       }
 

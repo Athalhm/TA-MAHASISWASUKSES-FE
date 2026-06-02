@@ -163,6 +163,8 @@ export default function LeaderboardPage() {
 
   const getName = (user) => user?.name || "Nama Pengguna";
   const getXp = (user) => Number(user?.xp || 0);
+  const shouldShowFriendEmptyState =
+    activeTab === "friends" && filteredLeaderboard.length <= 1;
 
   return (
     <main className="min-h-screen bg-white px-[30px] py-[23px]">
@@ -255,6 +257,26 @@ export default function LeaderboardPage() {
               Memuat leaderboard...
             </div>
           </div>
+        ) : shouldShowFriendEmptyState ? (
+          <>
+            <div className="flex h-[190px] items-center justify-center text-center">
+              <p className="text-[15px] font-bold text-black">
+                Tambahkan Teman untuk memunculkan Leaderboard Teman :)
+              </p>
+            </div>
+
+            <section className="mt-[12px] overflow-hidden rounded-[6px] border border-[#666] bg-white">
+              <div className="grid grid-cols-[1fr_2fr_1fr] border-b border-[#777] px-[39px] py-[15px] text-[14px] font-bold text-black">
+                <div>Peringkat</div>
+                <div>Pengguna</div>
+                <div className="text-right">XP</div>
+              </div>
+
+              <div className="flex h-40 items-center justify-center text-sm text-gray-500">
+                Belum ada teman di leaderboard.
+              </div>
+            </section>
+          </>
         ) : (
           <>
             <section
