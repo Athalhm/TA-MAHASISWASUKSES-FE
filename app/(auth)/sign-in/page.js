@@ -293,7 +293,7 @@ export default function SignInPage() {
 
             <div className="mt-20 flex justify-end sm:mt-24">
               <Link
-                href="/auth/forgot-password"
+                href="/forgot-password"
                 className="text-[16px] text-[#0070f3] underline underline-offset-2 hover:opacity-80 sm:text-[18px]"
               >
                 Lupa password ?
