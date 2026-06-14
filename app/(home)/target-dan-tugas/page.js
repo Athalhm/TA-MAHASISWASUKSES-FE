@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Loader2,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 export default function Page() {
@@ -34,6 +35,10 @@ export default function Page() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // ✅ State untuk konfirmasi delete
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, title }
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const [formData, setFormData] = useState({
     title: "",
     category: "Akademik",
@@ -44,21 +49,17 @@ export default function Page() {
 
   const categoryToApi = (category) => {
     const value = String(category).toLowerCase();
-
     if (value === "akademik") return "akademik";
     if (value === "pribadi") return "pribadi";
     if (value === "organisasi") return "organisasi";
-
     return "akademik";
   };
 
   const categoryToLabel = (category) => {
     const value = String(category).toLowerCase();
-
     if (value === "akademik") return "Akademik";
     if (value === "pribadi") return "Pribadi";
     if (value === "organisasi") return "Organisasi";
-
     return "Akademik";
   };
 
@@ -70,29 +71,16 @@ export default function Page() {
 
   const priorityToUi = (priority) => {
     const value = String(priority).toLowerCase();
-
     if (value === "tinggi") return "high";
     if (value === "sedang") return "medium";
     if (value === "rendah") return "low";
-
     return "medium";
-  };
-
-  const formatDeadlineForInput = (value) => {
-    if (!value) return "";
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-
-    return date.toISOString().slice(0, 10);
   };
 
   const formatDeadlineForDisplay = (value) => {
     if (!value) return "-";
-
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
-
     return date.toLocaleDateString("id-ID", {
       day: "2-digit",
       month: "short",
@@ -146,14 +134,8 @@ export default function Page() {
     } catch (error) {
       console.error(error);
       setErrorMessage(error?.message || "Data target dan tugas gagal dimuat.");
-
       setTasks([]);
-      setSummary({
-        completed: 0,
-        total: 0,
-        progress: 0,
-        highPriority: 0,
-      });
+      setSummary({ completed: 0, total: 0, progress: 0, highPriority: 0 });
     } finally {
       setLoading(false);
     }
@@ -165,17 +147,13 @@ export default function Page() {
 
   useEffect(() => {
     document.body.style.overflow = showAddModal ? "hidden" : "auto";
-
     return () => {
       document.body.style.overflow = "auto";
     };
   }, [showAddModal]);
 
   const handleInputChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleOpenModal = () => {
@@ -184,7 +162,6 @@ export default function Page() {
 
   const handleCloseModal = () => {
     if (submitting) return;
-
     setShowAddModal(false);
     setFormData({
       title: "",
@@ -241,9 +218,7 @@ export default function Page() {
 
       await fetchWithAuth(
         `/api/v1/progress-tracking/tasks/${task.id}/update_progress/${nextProgress}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
 
       await fetchTasks();
@@ -253,23 +228,41 @@ export default function Page() {
     }
   };
 
+  // ✅ Buka modal konfirmasi delete
+  const handleAskDelete = (e, task) => {
+    e.stopPropagation();
+    setDeleteTarget({ id: task.id, title: task.title });
+  };
+
+  // ✅ Eksekusi delete setelah konfirmasi
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      setDeleteLoading(true);
+
+      await fetchWithAuth(
+        `/api/v1/progress-tracking/tasks/${deleteTarget.id}`,
+        { method: "DELETE" }
+      );
+
+      // Hapus dari state lokal tanpa perlu refetch
+      setTasks((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error("Delete task error:", error);
+      alert(error?.message || "Gagal menghapus tugas. Silakan coba lagi.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const statsCards = [
-    {
-      title: "Tugas Selesai",
-      value: summary.completed,
-    },
-    {
-      title: "Todo",
-      value: summary.total,
-    },
-    {
-      title: "On Progress",
-      value: summary.progress,
-    },
-    {
-      title: "High Priority",
-      value: summary.highPriority,
-    },
+    { title: "Tugas Selesai", value: summary.completed },
+    { title: "Todo", value: summary.total },
+    { title: "On Progress", value: summary.progress },
+    { title: "High Priority", value: summary.highPriority },
   ];
 
   const filterTabs = [
@@ -292,7 +285,6 @@ export default function Page() {
       category.includes(query);
 
     const status = task?.status?.toLowerCase() || "";
-
     let matchesFilter = true;
 
     if (activeFilter === "todo") {
@@ -302,28 +294,18 @@ export default function Page() {
         status === "progress" ||
         status === "proses" ||
         status === "on progress";
-        } else if (activeFilter === "done") {
-          matchesFilter = status === "selesai";
-        }
+    } else if (activeFilter === "done") {
+      matchesFilter = status === "selesai";
+    }
 
     return matchesSearch && matchesFilter;
   });
 
   const getPriorityBadge = (priority) => {
     const normalized = priority?.toLowerCase();
-
-    if (normalized === "high") {
-      return "border-[#ff6d6d] bg-[#ffd6d6] text-[#ff3d3d]";
-    }
-
-    if (normalized === "medium") {
-      return "border-[#efaa4d] bg-[#ffd6a2] text-[#d9861e]";
-    }
-
-    if (normalized === "low") {
-      return "border-[#64dc84] bg-[#caf8d7] text-[#21a44a]";
-    }
-
+    if (normalized === "high") return "border-[#ff6d6d] bg-[#ffd6d6] text-[#ff3d3d]";
+    if (normalized === "medium") return "border-[#efaa4d] bg-[#ffd6a2] text-[#d9861e]";
+    if (normalized === "low") return "border-[#64dc84] bg-[#caf8d7] text-[#21a44a]";
     return "border-slate-200 bg-slate-100 text-slate-600";
   };
 
@@ -356,8 +338,7 @@ export default function Page() {
             Belum ada data yang sesuai
           </h3>
           <p className="mt-2 max-w-md text-sm text-[#777]">
-            Coba ubah filter atau kata kunci pencarian, atau tambahkan tugas
-            baru.
+            Coba ubah filter atau kata kunci pencarian, atau tambahkan tugas baru.
           </p>
           <button
             type="button"
@@ -383,6 +364,7 @@ export default function Page() {
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
+                  {/* Tombol toggle selesai */}
                   <button
                     type="button"
                     onClick={() => handleToggleTaskProgress(task)}
@@ -390,10 +372,7 @@ export default function Page() {
                   >
                     {isCompleted ? (
                       <div className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#08b45c]">
-                        <Check
-                          className="h-3.5 w-3.5 text-white"
-                          strokeWidth={3}
-                        />
+                        <Check className="h-3.5 w-3.5 text-white" strokeWidth={3} />
                       </div>
                     ) : (
                       <span className="block h-[18px] w-[18px] rounded-full border border-[#d5d5d5] bg-[#efefef]" />
@@ -422,7 +401,8 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="sm:pl-4">
+                {/* ✅ Priority badge + tombol delete */}
+                <div className="flex shrink-0 items-center gap-2 sm:pl-4">
                   <span
                     className={`inline-flex min-w-[58px] items-center justify-center rounded-full border px-4 py-[5px] text-[11px] font-semibold leading-none shadow-[0_2px_4px_rgba(0,0,0,0.08)] ${getPriorityBadge(
                       task.priority
@@ -430,6 +410,16 @@ export default function Page() {
                   >
                     {getPriorityLabel(task.priority)}
                   </span>
+
+                  {/* ✅ Tombol delete */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleAskDelete(e, task)}
+                    className="flex h-[30px] w-[30px] items-center justify-center rounded-full text-[#b0b0b0] transition hover:bg-red-50 hover:text-[#cc0000]"
+                    title="Hapus tugas"
+                  >
+                    <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.9} />
+                  </button>
                 </div>
               </div>
             </article>
@@ -448,9 +438,7 @@ export default function Page() {
               <div className="mb-5 flex items-start gap-3 rounded-[14px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
                 <div className="flex-1">
-                  <p className="font-medium">
-                    Terjadi masalah saat memuat data.
-                  </p>
+                  <p className="font-medium">Terjadi masalah saat memuat data.</p>
                   <p>{errorMessage}</p>
                 </div>
                 <button
@@ -503,7 +491,6 @@ export default function Page() {
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
                   {filterTabs.map((tab) => {
                     const isActive = activeFilter === tab.value;
-
                     return (
                       <button
                         key={tab.value}
@@ -541,6 +528,7 @@ export default function Page() {
         </section>
       </main>
 
+      {/* Modal tambah tugas */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4 py-6">
           <div className="relative w-full max-w-2xl rounded-[18px] bg-[#f4f4f4] px-5 py-6 shadow-2xl sm:px-6 sm:py-7">
@@ -570,9 +558,7 @@ export default function Page() {
                   <input
                     type="text"
                     value={formData.title}
-                    onChange={(e) =>
-                      handleInputChange("title", e.target.value)
-                    }
+                    onChange={(e) => handleInputChange("title", e.target.value)}
                     placeholder="Contoh : Tugas besar algoritma pemograman"
                     className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#222] outline-none placeholder:text-[#9b9b9b] focus:border-[#ff4d4f]"
                   />
@@ -582,7 +568,6 @@ export default function Page() {
                   <label className="mb-2 block text-sm font-semibold text-[#222]">
                     Kategori
                   </label>
-
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {[
                       { label: "Akademik", icon: BookOpen },
@@ -591,14 +576,11 @@ export default function Page() {
                     ].map((item) => {
                       const Icon = item.icon;
                       const isActive = formData.category === item.label;
-
                       return (
                         <button
                           key={item.label}
                           type="button"
-                          onClick={() =>
-                            handleInputChange("category", item.label)
-                          }
+                          onClick={() => handleInputChange("category", item.label)}
                           className={`flex min-h-[80px] flex-col items-center justify-center rounded-2xl border transition ${
                             isActive
                               ? "border-[#ff4d4f] bg-[#fff1f1]"
@@ -627,9 +609,7 @@ export default function Page() {
                     <input
                       type="date"
                       value={formData.deadline}
-                      onChange={(e) =>
-                        handleInputChange("deadline", e.target.value)
-                      }
+                      onChange={(e) => handleInputChange("deadline", e.target.value)}
                       className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#666] outline-none focus:border-[#ff4d4f]"
                     />
                   </div>
@@ -638,20 +618,16 @@ export default function Page() {
                     <label className="mb-2 block text-sm font-semibold text-[#222]">
                       Tingkat Kesulitan
                     </label>
-
                     <div className="relative">
                       <select
                         value={formData.difficulty}
-                        onChange={(e) =>
-                          handleInputChange("difficulty", e.target.value)
-                        }
+                        onChange={(e) => handleInputChange("difficulty", e.target.value)}
                         className="h-11 w-full appearance-none rounded-xl border border-[#d1d1d1] bg-transparent px-10 pr-12 text-sm font-medium text-[#222] outline-none focus:border-[#ff4d4f]"
                       >
                         <option value="easy">easy</option>
                         <option value="medium">medium</option>
                         <option value="hard">hard</option>
                       </select>
-
                       <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2">
                         <span
                           className={`block h-3.5 w-3.5 rounded-full ${
@@ -663,7 +639,6 @@ export default function Page() {
                           }`}
                         />
                       </div>
-
                       <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#222]" />
                     </div>
                   </div>
@@ -676,9 +651,7 @@ export default function Page() {
                   <textarea
                     rows={3}
                     value={formData.description}
-                    onChange={(e) =>
-                      handleInputChange("description", e.target.value)
-                    }
+                    onChange={(e) => handleInputChange("description", e.target.value)}
                     placeholder="Catatan Tambahan"
                     className="w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 py-4 text-sm text-[#222] outline-none placeholder:text-[#9c9c9c] focus:border-[#ff4d4f]"
                   />
@@ -692,7 +665,6 @@ export default function Page() {
                   >
                     Batal
                   </button>
-
                   <button
                     type="submit"
                     disabled={submitting}
@@ -702,6 +674,48 @@ export default function Page() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Modal konfirmasi delete */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-[400px] rounded-[16px] bg-white px-6 py-7 text-center shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="h-6 w-6 text-[#cc0000]" />
+            </div>
+
+            <h3 className="mt-4 text-[17px] font-bold text-[#111]">
+              Hapus Tugas?
+            </h3>
+
+            <p className="mt-2 text-[13px] text-[#6b6b6b]">
+              Kamu akan menghapus{" "}
+              <span className="font-semibold text-[#111]">
+                "{deleteTarget.title}"
+              </span>
+              . Tindakan ini tidak bisa dibatalkan.
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 rounded-[8px] border border-[#d7d7d7] bg-white py-2.5 text-[13px] font-semibold text-[#444] transition hover:bg-[#f5f5f5] disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={handleConfirmDelete}
+                className="flex-1 rounded-[8px] bg-[#cc0000] py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#aa0000] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus"}
+              </button>
             </div>
           </div>
         </div>

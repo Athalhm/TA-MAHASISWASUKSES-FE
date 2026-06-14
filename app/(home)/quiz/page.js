@@ -32,6 +32,10 @@ function QuizContent() {
   const [selectedCertificateQuiz, setSelectedCertificateQuiz] = useState(null);
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
+  // ✅ State untuk proses generate + download sertifikat
+  const [certLoading, setCertLoading] = useState(false);
+  const [certError, setCertError] = useState(null);
+
   const fallbackData = {
     title: "Quiz & Latihan",
     description: "Kerjakan quiz dapatkan sertifikat dan XP",
@@ -47,9 +51,7 @@ function QuizContent() {
 
   const normalizeDifficulty = (difficulty) => {
     if (!difficulty) return "easy";
-
     const value = String(difficulty).toLowerCase();
-
     if (value === "hard") return "Hard";
     if (value === "medium") return "Medium";
     return "easy";
@@ -172,13 +174,91 @@ function QuizContent() {
       alert("Quiz tidak valid.");
       return;
     }
-
     router.push(`/quiz/${quizId}`);
   };
 
   const handleDownloadCertificate = (quiz) => {
+    setCertError(null);
     setSelectedCertificateQuiz(quiz);
     setShowCertificateModal(true);
+  };
+
+  // ✅ Flow baru: POST generate → GET download
+  const handleConfirmDownloadCertificate = async () => {
+    if (!selectedCertificateQuiz?.id) {
+      setCertError("Data quiz tidak valid.");
+      return;
+    }
+
+    try {
+      setCertLoading(true);
+      setCertError(null);
+
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+      // Step 1: Generate certificate → dapat certificate_id
+      const generateRes = await fetch(
+        `${baseUrl}/api/v1/quiz/${selectedCertificateQuiz.id}/certificate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        }
+      );
+
+      if (!generateRes.ok) {
+        throw new Error("Gagal membuat sertifikat. Pastikan quiz sudah diselesaikan.");
+      }
+
+      const generateData = await generateRes.json();
+      const certificateId = generateData?.certificate_id;
+
+      if (!certificateId) {
+        throw new Error("Sertifikat tidak ditemukan. Silakan coba lagi.");
+      }
+
+      // Step 2: Download PDF menggunakan certificate_id
+      const downloadRes = await fetch(
+        `${baseUrl}/api/v1/certificate/${certificateId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        }
+      );
+
+      if (!downloadRes.ok) {
+        throw new Error("Gagal mendownload sertifikat.");
+      }
+
+      const blob = await downloadRes.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${selectedCertificateQuiz.title || "sertifikat"}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      setShowCertificateModal(false);
+      setSelectedCertificateQuiz(null);
+      setCertError(null);
+    } catch (err) {
+      console.error("Certificate error:", err);
+      setCertError(err?.message || "Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
+      setCertLoading(false);
+    }
   };
 
   const data = quizData || fallbackData;
@@ -190,19 +270,16 @@ function QuizContent() {
 
   useEffect(() => {
     setAnimatedProgress(0);
-
     const timer = setTimeout(() => {
       setAnimatedProgress(progress);
     }, 200);
-
     return () => clearTimeout(timer);
   }, [progress]);
-      
+
   const renderTabs = () => (
     <div className="mt-8 flex flex-wrap items-center gap-5">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
-
         return (
           <button
             key={tab.id}
@@ -228,24 +305,19 @@ function QuizContent() {
     return (
       <div className="relative overflow-hidden rounded-[18px] px-8 py-8 text-white sm:px-10">
         <div className="absolute inset-0 animate-gradient bg-[linear-gradient(-45deg,#ff0000,#8B0000,#ff4d4d,#7f0000)] bg-[length:350%_350%]" />
-
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_35%)]" />
-
         <div className="relative z-10">
           <h2 className="text-[17px] font-bold">
             {isDaily ? "Quest Hari Ini" : "Quest Minggu Ini"}
           </h2>
-
           <p className="mt-2 text-[14px] font-medium">
             Selesaikan quest untuk mendapatkan XP dan reward!
           </p>
-
           <div className="mt-5 flex items-center gap-20">
             <div>
               <p className="text-[14px] font-semibold">Total Quest</p>
               <p className="mt-3 text-[12px] font-bold">{quests.length}</p>
             </div>
-
             <div>
               <p className="text-[14px] font-semibold">Selesai</p>
               <p className="mt-3 text-[12px] font-bold">{completedCount}</p>
@@ -297,7 +369,6 @@ function QuizContent() {
                   <h3 className="text-[13px] font-bold text-black">
                     {quest.title}
                   </h3>
-
                   <span
                     className={`rounded-full px-3 py-1 text-[15px] font-medium ${
                       quest.difficulty === "easy"
@@ -323,7 +394,6 @@ function QuizContent() {
                         style={{ width: `${quest.progress}%` }}
                       />
                     </div>
-
                     <span className="text-[14px] font-medium text-blue-500">
                       {quest.progressText}
                     </span>
@@ -341,53 +411,6 @@ function QuizContent() {
     );
   };
 
-  const handleConfirmDownloadCertificate = async () => {
-    if (!selectedCertificateQuiz?.certificateId) {
-      alert("Sertifikat belum tersedia.");
-      return;
-    }
-
-    try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
-
-      const response = await fetch(
-        `${baseUrl}/api/v1/certificate/${selectedCertificateQuiz.certificateId}`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: token ? `Bearer ${token}` : "",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Gagal mendownload sertifikat.");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${selectedCertificateQuiz.title || "sertifikat"}.pdf`;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      window.URL.revokeObjectURL(url);
-
-      setShowCertificateModal(false);
-      setSelectedCertificateQuiz(null);
-    } catch (err) {
-      console.error("Download certificate error:", err);
-      alert(err?.message || "Gagal mendownload sertifikat.");
-    }
-  };
-
   return (
     <main className="min-h-screen bg-white px-4 pt-6 pb-10 sm:px-8 lg:px-10">
       <section className="mx-auto w-full max-w-[1200px]">
@@ -398,7 +421,6 @@ function QuizContent() {
                 <span>
                   Data quiz gagal dimuat. Menampilkan data fallback sementara.
                 </span>
-
                 <button
                   onClick={fetchQuizData}
                   className="flex items-center gap-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700"
@@ -427,7 +449,6 @@ function QuizContent() {
                         {data.description}
                       </p>
                     </div>
-
                     <p className="mt-9 whitespace-nowrap text-[13px] font-bold text-black sm:text-xs">
                       {data.completedQuiz} / {data.totalQuiz} Quiz Selesai
                     </p>
@@ -462,34 +483,27 @@ function QuizContent() {
               ) : recommendedQuiz ? (
                 <div className="relative overflow-hidden rounded-[16px] px-10 py-7 text-white">
                   <div className="absolute inset-0 animate-gradient bg-[linear-gradient(-45deg,#ff0000,#8B0000,#ff4d4d,#7f0000)] bg-[length:350%_350%]" />
-
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_35%)]" />
-
                   <div className="relative z-10">
                     <p className="text-[13px] font-medium">
                       {recommendedQuiz.category}
                     </p>
-
                     <h3 className="mt-1 text-[15px] font-bold">
                       {recommendedQuiz.title}
                     </h3>
-
                     <div className="mt-5 flex flex-wrap items-center gap-7 text-[12px] font-medium">
                       <span className="flex items-center gap-1">
                         <Clock size={13} className="text-white" />
                         {recommendedQuiz.duration}
                       </span>
-
                       <span className="flex items-center gap-1">
                         <Star size={11} className="fill-white text-white" />
                         {recommendedQuiz.xp}
                       </span>
-
                       <span className="rounded-full bg-white/25 px-4 py-1">
                         {recommendedQuiz.level}
                       </span>
                     </div>
-
                     <button
                       type="button"
                       onClick={() => handleStartQuiz(recommendedQuiz.id)}
@@ -537,7 +551,6 @@ function QuizContent() {
                         <p className="text-[13px] font-medium text-gray-400">
                           {quiz.category}
                         </p>
-
                         <span
                           className={`rounded-full px-3 py-1 text-[12px] font-semibold ${
                             quiz.statusColor === "green"
@@ -562,7 +575,6 @@ function QuizContent() {
                           <Clock size={12} />
                           {quiz.duration}
                         </span>
-
                         <span className="flex items-center gap-1">
                           <Star
                             size={12}
@@ -570,7 +582,6 @@ function QuizContent() {
                           />
                           {quiz.xp}
                         </span>
-
                         <span className="rounded-full bg-red-100 px-3 py-1 text-red-500">
                           {quiz.level}
                         </span>
@@ -659,21 +670,38 @@ function QuizContent() {
               </p>
             </div>
 
+            {/* ✅ Tampilkan error jika generate/download gagal */}
+            {certError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-[12px] font-medium text-red-600">{certError}</p>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={handleConfirmDownloadCertificate}
-              className="mt-6 w-full rounded-md bg-red-500 py-3 text-[13px] font-bold text-white transition hover:bg-red-600"
+              disabled={certLoading}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-md bg-red-500 py-3 text-[13px] font-bold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Lanjut ke Pembayaran
+              {certLoading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Memproses...
+                </>
+              ) : (
+                "Lanjut ke Pembayaran"
+              )}
             </button>
 
             <button
               type="button"
+              disabled={certLoading}
               onClick={() => {
                 setShowCertificateModal(false);
                 setSelectedCertificateQuiz(null);
+                setCertError(null);
               }}
-              className="mt-3 w-full rounded-md border border-red-500 bg-white py-3 text-[13px] font-bold text-red-500 transition hover:bg-red-50"
+              className="mt-3 w-full rounded-md border border-red-500 bg-white py-3 text-[13px] font-bold text-red-500 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Kembali
             </button>

@@ -10,6 +10,7 @@ import {
   ThumbsUp,
   X,
   Users,
+  Trash2,
 } from "lucide-react";
 
 export default function Page() {
@@ -51,13 +52,16 @@ export default function Page() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
+  // ✅ State untuk konfirmasi delete
+  const [deleteTarget, setDeleteTarget] = useState(null); // { id, type: 'post' | 'room', title }
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const mapCategoryToApi = (category) => {
     const map = {
       Umum: "umum",
       "Tips & Trik": "tips_trik",
       Bantuan: "bantuan",
     };
-
     return map[category] || "umum";
   };
 
@@ -67,31 +71,29 @@ export default function Page() {
       tips_trik: "Tips & Trik",
       bantuan: "Bantuan",
     };
-
     return map[category] || "Umum";
   };
 
   const formatTime = (dateValue) => {
     if (!dateValue) return "Baru saja";
-
     const date = new Date(dateValue);
     if (Number.isNaN(date.getTime())) return "Baru saja";
-
     const diffMs = Date.now() - date.getTime();
     const diffMinutes = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMinutes / 60);
     const diffDays = Math.floor(diffHours / 24);
-
     if (diffMinutes < 1) return "Baru saja";
     if (diffMinutes < 60) return `${diffMinutes} menit lalu`;
     if (diffHours < 24) return `${diffHours} jam lalu`;
     return `${diffDays} hari lalu`;
   };
 
+  // ✅ Tambahkan authorId ke normalizePost untuk pengecekan kepemilikan
   const normalizePost = (post) => ({
     id: post?.id,
     title: post?.title || "Tanpa Judul",
     author: post?.author?.full_name || "Anonim",
+    authorId: post?.author?.id || null,
     createdAt: formatTime(post?.created_at),
     excerpt: post?.content || "Belum ada isi postingan.",
     category: mapCategoryFromApi(post?.category),
@@ -141,7 +143,8 @@ export default function Page() {
         ]);
 
       const forumDataResult =
-        forumResponse.status === "fulfilled" && Array.isArray(forumResponse.value)
+        forumResponse.status === "fulfilled" &&
+        Array.isArray(forumResponse.value)
           ? forumResponse.value
           : [];
 
@@ -184,7 +187,6 @@ export default function Page() {
 
   useEffect(() => {
     document.body.style.overflow = isModalOpen ? "hidden" : "auto";
-
     return () => {
       document.body.style.overflow = "auto";
     };
@@ -193,18 +195,83 @@ export default function Page() {
   const filteredPosts = useMemo(() => {
     if (activeCategory === "Ruang Belajar") return studyRooms;
     if (activeCategory === "Semua") return forumData.latestPosts;
-
     return forumData.latestPosts.filter(
       (post) =>
         (post?.category || "").toLowerCase() === activeCategory.toLowerCase()
     );
   }, [forumData.latestPosts, studyRooms, activeCategory]);
 
+  // ✅ Cek apakah current user adalah penulis post
+  const isPostOwner = (post) => {
+    if (!currentUser || !post) return false;
+    const currentUserId = currentUser?.id;
+    const currentUserName = currentUser?.full_name || currentUser?.name;
+    return (
+      (currentUserId && post.authorId && currentUserId === post.authorId) ||
+      (currentUserName &&
+        post.author &&
+        currentUserName.toLowerCase() === post.author.toLowerCase())
+    );
+  };
+
+  // ✅ Cek apakah current user adalah pemilik room
+  const isRoomOwner = (room) => {
+    if (!currentUser || !room) return false;
+    const currentUserId = currentUser?.id;
+    const currentUserName = currentUser?.full_name || currentUser?.name;
+    return (
+      (currentUserId && room.authorId && currentUserId === room.authorId) ||
+      (currentUserName &&
+        room.author &&
+        currentUserName.toLowerCase() === room.author.toLowerCase())
+    );
+  };
+
+  // ✅ Buka modal konfirmasi delete
+  const handleAskDelete = (e, item) => {
+    e.stopPropagation();
+    setDeleteTarget({ id: item.id, type: item.type, title: item.title });
+  };
+
+  // ✅ Konfirmasi delete — panggil endpoint sesuai type
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      setDeleteLoading(true);
+
+      if (deleteTarget.type === "post") {
+        await fetchWithAuth(`/api/v1/community/posts/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        // Hapus dari state lokal
+        setForumData((prev) => ({
+          ...prev,
+          latestPosts: prev.latestPosts.filter(
+            (post) => post.id !== deleteTarget.id
+          ),
+        }));
+      } else if (deleteTarget.type === "room") {
+        await fetchWithAuth(`/api/v1/community/room/${deleteTarget.id}`, {
+          method: "DELETE",
+        });
+        // Hapus dari state lokal
+        setStudyRooms((prev) =>
+          prev.filter((room) => room.id !== deleteTarget.id)
+        );
+      }
+
+      setDeleteTarget(null);
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert(error?.message || "Gagal menghapus. Silakan coba lagi.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleChangeForm = (field, value) => {
-    setPostForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setPostForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const openModal = () => {
@@ -215,7 +282,6 @@ export default function Page() {
 
   const closeModal = () => {
     if (submitLoading) return;
-
     setIsModalOpen(false);
     setSubmitError("");
     setPostForm(initialForm);
@@ -256,7 +322,6 @@ export default function Page() {
 
         setIsModalOpen(false);
         setPostForm(initialForm);
-
         router.push(`/forum/rooms/${result.id}`);
         return;
       }
@@ -294,11 +359,8 @@ export default function Page() {
     try {
       const result = await fetchWithAuth(
         `/api/v1/community/posts/${postId}/like`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
-
       setForumData((prev) => ({
         ...prev,
         latestPosts: prev.latestPosts.map((post) =>
@@ -320,11 +382,8 @@ export default function Page() {
     try {
       const result = await fetchWithAuth(
         `/api/v1/community/room/${roomId}/like?room_id=${roomId}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
-
       setStudyRooms((prev) =>
         prev.map((room) =>
           room.id === roomId
@@ -347,8 +406,6 @@ export default function Page() {
       await fetchWithAuth(`/api/v1/community/rooms/${roomId}/join`, {
         method: "POST",
       });
-
-      // 🔥 UPDATE STATE BIAR LANGSUNG GANTI BUTTON
       setStudyRooms((prev) =>
         prev.map((room) =>
           room.id === roomId
@@ -360,7 +417,6 @@ export default function Page() {
             : room
         )
       );
-
       router.push(`/forum/rooms/${roomId}`);
     } catch (error) {
       console.error("Join room error:", error);
@@ -376,35 +432,13 @@ export default function Page() {
     router.push(`/forum/posts/${postId}`);
   };
 
-  const isRoomOwner = (room) => {
-    if (!currentUser || !room) return false;
-
-    const currentUserId = currentUser?.id;
-    const currentUserName = currentUser?.full_name || currentUser?.name;
-
-    return (
-      (currentUserId && room.authorId && currentUserId === room.authorId) ||
-      (currentUserName &&
-        room.author &&
-        currentUserName.toLowerCase() === room.author.toLowerCase())
-    );
-  };
-
   const renderRoomButton = (room) => {
     const currentParticipants = Number(room.currentParticipants || 0);
     const maxParticipants = Number(room.maxParticipants || 0);
-
-    const isFull =
-      maxParticipants > 0 &&
-      currentParticipants >= maxParticipants;
-
+    const isFull = maxParticipants > 0 && currentParticipants >= maxParticipants;
     const isOwner = isRoomOwner(room);
+    const isJoined = room.isJoined === true || isOwner === true;
 
-    const isJoined =
-      room.isJoined === true ||
-      isOwner === true;
-
-    // OWNER ATAU SUDAH JOIN
     if (isJoined) {
       return (
         <button
@@ -417,7 +451,6 @@ export default function Page() {
       );
     }
 
-    // ROOM PENUH
     if (isFull) {
       return (
         <button
@@ -430,7 +463,6 @@ export default function Page() {
       );
     }
 
-    // BELUM JOIN
     return (
       <button
         type="button"
@@ -507,7 +539,6 @@ export default function Page() {
               <div className="flex min-w-max items-center gap-3">
                 {categoryTabs.map((tab) => {
                   const isActive = activeCategory === tab;
-
                   return (
                     <button
                       key={tab}
@@ -530,93 +561,105 @@ export default function Page() {
               {loading ? (
                 renderSkeleton()
               ) : filteredPosts.length > 0 ? (
-                filteredPosts.map((item) => (
-                  <article
-                    key={`${item.type}-${item.id}`}
-                    onClick={() => {
-                      if (item.type === "post") {
-                        handleOpenPostDetail(item.id);
-                      }
-                    }}
-                    className={`rounded-[18px] border border-[#e9e9e9] bg-white px-6 py-5 shadow-[0_3px_8px_rgba(0,0,0,0.12)] ${
-                      item.type === "post"
-                        ? "cursor-pointer transition hover:-translate-y-[1px] hover:shadow-[0_6px_14px_rgba(0,0,0,0.14)]"
-                        : ""
-                    }`}
-                  >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
-                      <div className="flex min-w-0 flex-1 gap-4">
-                        <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#ff2d2d] to-[#d50000] text-white">
-                          <MessageCircle size={19} strokeWidth={1.8} />
+                filteredPosts.map((item) => {
+                  // ✅ Cek kepemilikan per item
+                  const canDelete =
+                    item.type === "post"
+                      ? isPostOwner(item)
+                      : isRoomOwner(item);
+
+                  return (
+                    <article
+                      key={`${item.type}-${item.id}`}
+                      onClick={() => {
+                        if (item.type === "post") {
+                          handleOpenPostDetail(item.id);
+                        }
+                      }}
+                      className={`rounded-[18px] border border-[#e9e9e9] bg-white px-6 py-5 shadow-[0_3px_8px_rgba(0,0,0,0.12)] ${
+                        item.type === "post"
+                          ? "cursor-pointer transition hover:-translate-y-[1px] hover:shadow-[0_6px_14px_rgba(0,0,0,0.14)]"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:justify-between">
+                        <div className="flex min-w-0 flex-1 gap-4">
+                          <div className="mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#ff2d2d] to-[#d50000] text-white">
+                            <MessageCircle size={19} strokeWidth={1.8} />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h2 className="truncate text-[18px] font-semibold text-[#111111] sm:text-[20px]">
+                              {item.title}
+                            </h2>
+                            <p className="mt-2 text-sm text-[#6b6b6b]">
+                              oleh {item.author} • {item.createdAt}
+                            </p>
+                            <p className="mt-2 text-[15px] leading-7 text-[#2f2f2f]">
+                              {item.excerpt}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="min-w-0 flex-1">
-                          <h2 className="truncate text-[18px] font-semibold text-[#111111] sm:text-[20px]">
-                            {item.title}
-                          </h2>
-
-                          <p className="mt-2 text-sm text-[#6b6b6b]">
-                            oleh {item.author} • {item.createdAt}
-                          </p>
-
-                          <p className="mt-2 text-[15px] leading-7 text-[#2f2f2f]">
-                            {item.excerpt}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="sm:pl-4">
-                        <span className="inline-flex rounded-full bg-[#f3b7b9] px-4 py-2 text-xs font-medium text-[#ff2d2d] shadow-[0_3px_6px_rgba(0,0,0,0.12)]">
-                          {item.category}
-                        </span>
-                      </div>
-                    </div>
-
-                    {item.type === "room" && (
-                      <div className="mt-4 flex items-center justify-between rounded-[10px] bg-[#f6f7f9] px-4 py-3">
-                        <div className="flex items-center gap-2 text-sm font-medium text-[#333333]">
-                          <Users size={16} />
-                          <span>
-                            {item.currentParticipants} / {item.maxParticipants}{" "}
-                            peserta
+                        <div className="sm:pl-4">
+                          <span className="inline-flex rounded-full bg-[#f3b7b9] px-4 py-2 text-xs font-medium text-[#ff2d2d] shadow-[0_3px_6px_rgba(0,0,0,0.12)]">
+                            {item.category}
                           </span>
                         </div>
-
-                        {renderRoomButton(item)}
                       </div>
-                    )}
 
-                    <div className="mt-6 flex flex-wrap items-center gap-8 text-sm text-[#555555]">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                      {item.type === "room" && (
+                        <div className="mt-4 flex items-center justify-between rounded-[10px] bg-[#f6f7f9] px-4 py-3">
+                          <div className="flex items-center gap-2 text-sm font-medium text-[#333333]">
+                            <Users size={16} />
+                            <span>
+                              {item.currentParticipants} / {item.maxParticipants} peserta
+                            </span>
+                          </div>
+                          {renderRoomButton(item)}
+                        </div>
+                      )}
 
-                          if (item.type === "post") {
-                            handleLikePost(item.id);
-                          } else if (item.type === "room") {
-                            handleLikeRoom(item.id);
-                          }
-                        }}
-                        className="flex items-center gap-2 transition hover:text-[#ff1f25]"
-                      >
-                        <ThumbsUp
-                          size={16}
-                          strokeWidth={1.9}
-                          className={
-                            item.isLiked ? "fill-[#ff1f25] text-[#ff1f25]" : ""
-                          }
-                        />
-                        <span>{item.likes}</span>
-                      </button>
+                      <div className="mt-6 flex flex-wrap items-center gap-8 text-sm text-[#555555]">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (item.type === "post") handleLikePost(item.id);
+                            else if (item.type === "room") handleLikeRoom(item.id);
+                          }}
+                          className="flex items-center gap-2 transition hover:text-[#ff1f25]"
+                        >
+                          <ThumbsUp
+                            size={16}
+                            strokeWidth={1.9}
+                            className={
+                              item.isLiked ? "fill-[#ff1f25] text-[#ff1f25]" : ""
+                            }
+                          />
+                          <span>{item.likes}</span>
+                        </button>
 
-                      <div className="flex items-center gap-2">
-                        <MessageCircle size={16} strokeWidth={1.9} />
-                        <span>{item.comments} Komentar</span>
+                        <div className="flex items-center gap-2">
+                          <MessageCircle size={16} strokeWidth={1.9} />
+                          <span>{item.comments} Komentar</span>
+                        </div>
+
+                        {/* ✅ Tombol delete hanya muncul untuk pemilik post/room */}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleAskDelete(e, item)}
+                            className="ml-auto flex items-center gap-1.5 rounded-md px-2 py-1 text-[#cc0000] transition hover:bg-red-50"
+                            title="Hapus"
+                          >
+                            <Trash2 size={15} strokeWidth={1.9} />
+                          </button>
+                        )}
                       </div>
-                    </div>
-                  </article>
-                ))
+                    </article>
+                  );
+                })
               ) : (
                 <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[18px] border border-dashed border-[#d8d8d8] bg-white px-6 py-10 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#fff1f2] text-[#ff1d25]">
@@ -654,6 +697,7 @@ export default function Page() {
         </section>
       </main>
 
+      {/* Modal buat postingan */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 py-6">
           <div className="relative w-full max-w-[680px] rounded-[18px] bg-white px-5 py-6 shadow-[0_20px_60px_rgba(0,0,0,0.18)] sm:px-8 sm:py-8">
@@ -692,11 +736,9 @@ export default function Page() {
                 <label className="mb-4 block text-[16px] font-semibold text-[#111111]">
                   Kategori
                 </label>
-
                 <div className="flex flex-wrap justify-center gap-3">
                   {postCategories.map((category) => {
                     const isSelected = postForm.category === category;
-
                     return (
                       <button
                         key={category}
@@ -764,7 +806,6 @@ export default function Page() {
                 >
                   Batal
                 </button>
-
                 <button
                   type="submit"
                   disabled={submitLoading}
@@ -778,6 +819,48 @@ export default function Page() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Modal konfirmasi delete */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-[420px] rounded-[16px] bg-white px-6 py-7 text-center shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
+              <Trash2 size={24} className="text-[#cc0000]" />
+            </div>
+
+            <h3 className="mt-4 text-[18px] font-bold text-[#111111]">
+              Hapus {deleteTarget.type === "post" ? "Postingan" : "Ruang Belajar"}?
+            </h3>
+
+            <p className="mt-2 text-[13px] text-[#6b6b6b]">
+              Kamu akan menghapus{" "}
+              <span className="font-semibold text-[#111111]">
+                "{deleteTarget.title}"
+              </span>
+              . Tindakan ini tidak bisa dibatalkan.
+            </p>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 rounded-[8px] border border-[#d7d7d7] bg-white py-2.5 text-[13px] font-semibold text-[#444444] transition hover:bg-[#f5f5f5] disabled:opacity-60"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={handleConfirmDelete}
+                className="flex-1 rounded-[8px] bg-[#cc0000] py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#aa0000] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deleteLoading ? "Menghapus..." : "Ya, Hapus"}
+              </button>
+            </div>
           </div>
         </div>
       )}

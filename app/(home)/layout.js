@@ -254,17 +254,18 @@ export default function RootLayout({ children }) {
         <header className="w-full border-x border-t border-b border-[#bdbdbd] bg-[#f3f3f3]">
           <div className="flex min-h-[72px] w-full items-center justify-between px-10">
             <div className="flex items-center gap-4">
-              <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-gradient-to-b from-[#ff2338] to-[#8b0c12]">
+              <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center overflow-hidden rounded-[14px]">
                 <img
-                  src="/images/logo-telu.png"
-                  alt="Logo Telu"
+                  src="/images/logo background merah.png"
+                  alt="Logo Levelin"
                   className="h-full w-full object-cover"
                 />
               </div>
-
-              <h1 className="text-[20px] font-bold tracking-[-0.02em] text-[#171717]">
-                Mahasiswa Sukses
-              </h1>
+              <img
+                src="/images/logo tulisan aja.png"
+                alt="Levelin"
+                className="h-auto w-[132px] object-contain"
+              />
             </div>
 
             <div className="flex items-center gap-5">

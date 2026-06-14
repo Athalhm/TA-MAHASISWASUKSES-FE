@@ -174,29 +174,18 @@ export default function SignUpPage() {
     <main className="min-h-screen bg-[#f3f3f3] px-4 py-4 sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1440px] items-center">
         <div className="grid w-full grid-cols-1 gap-8 lg:grid-cols-[1fr_760px] lg:gap-10 xl:gap-14">
-          <section className="flex items-center justify-center lg:justify-start">
-            <div className="w-full max-w-[520px] px-2 sm:px-4 lg:px-6">
-              <div className="text-center lg:text-left">
-                <h1 className="text-[42px] font-semibold leading-none tracking-tight text-[#2f2f2f] sm:text-[54px] xl:text-[44px]">
-                  Mahasiswa Sukses
-                </h1>
-
-                <p className="mt-8 text-[26px] font-normal leading-tight text-[#353535] sm:text-[36px] xl:text-[30px]">
-                  Belajar Sambil Berkompetisi!
-                </p>
-              </div>
-
-              <div className="mt-14 flex justify-center lg:mt-20 lg:justify-start">
-                <div className="relative h-[260px] w-[220px] sm:h-[320px] sm:w-[260px] xl:h-[360px] xl:w-[300px]">
-                  <Image
-                    src="/images/logo-telu.png"
-                    alt="Logo Telu"
-                    fill
-                    className="object-contain"
-                    priority
-                  />
-                </div>
-              </div>
+          <section className="flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <img
+                src="/images/logo background merah.png"
+                alt="Logo Levelin"
+                className="h-[251px] w-[251px] object-contain"
+              />
+              <img
+                src="/images/logo tulisan aja.png"
+                alt="Levelin"
+                className="h-auto w-[445px] object-contain"
+              />
             </div>
           </section>
 
@@ -341,32 +330,6 @@ export default function SignUpPage() {
                       {fieldErrors.phone ? (
                         <p className="mt-2 text-sm text-red-500">
                           {fieldErrors.phone}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="nim"
-                        className="mb-2 block text-[18px] font-medium text-[#6e6e6e]"
-                      >
-                        NIM
-                      </label>
-                      <input
-                        id="nim"
-                        name="nim"
-                        type="text"
-                        value={form.nim}
-                        onChange={handleChange}
-                        className={`h-[54px] w-full rounded-2xl border bg-transparent px-5 text-base text-[#2f2f2f] outline-none transition ${
-                          fieldErrors.nim
-                            ? "border-red-300 focus:border-red-400"
-                            : "border-[#cfcfcf] focus:border-[#a8a8a8]"
-                        }`}
-                      />
-                      {fieldErrors.nim ? (
-                        <p className="mt-2 text-sm text-red-500">
-                          {fieldErrors.nim}
                         </p>
                       ) : null}
                     </div>

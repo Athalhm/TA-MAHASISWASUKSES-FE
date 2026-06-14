@@ -150,21 +150,19 @@ export default function SignInPage() {
   return (
     <main className="min-h-screen bg-[#f3f3f3]">
       <section className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col items-center px-4 py-8 sm:px-6 sm:py-10">
-        <div className="mb-10 flex flex-col items-center justify-center sm:mb-12">
+        <div className="mb-6 flex flex-col items-center justify-center sm:mb-8">
           <div className="mb-3 flex h-[56px] w-[56px] items-center justify-center">
             <img
-              src="/images/logo-telu.png"
-              alt="Logo Telu"
+              src="/images/logo background merah.png"
+              alt="Logo Levelin"
               className="h-full w-full object-contain"
             />
           </div>
-
-          <h1 className="text-center text-[18px] font-bold leading-none text-[#1f1f1f] sm:text-[20px]">
-            Mahasiswa Sukses
-          </h1>
-          <p className="mt-1 text-center text-[16px] leading-none text-[#1f1f1f] sm:text-[18px]">
-            Belajar Sambil Berkompetisi!
-          </p>
+            <img
+              src="/images/logo tulisan aja.png"
+              alt="Levelin"
+              className="h-auto w-[180px] object-contain"
+            />
         </div>
 
         <div className="w-full max-w-[640px] rounded-[28px] border border-red-400 bg-transparent px-6 py-8 sm:px-14 sm:py-10">

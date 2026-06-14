@@ -2,7 +2,7 @@ import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 
 export const metadata = {
-  title: "Mahasiswa Sukses",
+  title: "Levelin",
   description: "Belajar Sambil Berkompetisi!",
 };
 
