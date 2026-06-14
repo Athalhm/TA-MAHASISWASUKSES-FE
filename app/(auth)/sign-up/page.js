@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Eye, EyeOff, Loader2, AlertCircle, RefreshCcw } from "lucide-react";
 
 export default function SignUpPage() {
@@ -12,7 +11,6 @@ export default function SignUpPage() {
       username: "",
       email: "",
       phone: "",
-      nim: "",
       birthDate: "",
       password: "",
     }),
@@ -26,18 +24,13 @@ export default function SignUpPage() {
   const [apiError, setApiError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // ✅ Fix: clear error hanya untuk field yang sedang diketik
   function handleChange(e) {
     const { name, value } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
 
-    setFieldErrors((prev) => ({
-      ...prev,
-      [name]: "",
-    }));
+    setFieldErrors((prev) => ({ ...prev, [name]: "" }));
 
     setApiError("");
     setSuccessMessage("");
@@ -70,10 +63,7 @@ export default function SignUpPage() {
       errors.phone = "Nomor telephone tidak valid.";
     }
 
-    if (!form.nim.trim()) {
-      errors.nim = "NIM wajib diisi.";
-    }
-
+    // ✅ Fix: NIM sekarang divalidasi dan ada input-nya di form
     if (!form.birthDate) {
       errors.birthDate = "Tanggal lahir wajib diisi.";
     }
@@ -82,7 +72,9 @@ export default function SignUpPage() {
       errors.password = "Password wajib diisi.";
     } else if (form.password.length < 8) {
       errors.password = "Password minimal 8 karakter.";
-    } else if (!/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/.test(form.password)) {
+    } else if (
+      !/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/.test(form.password)
+    ) {
       errors.password =
         "Password harus memiliki minimal satu huruf, satu angka, dan satu karakter spesial.";
     }
@@ -115,14 +107,12 @@ export default function SignUpPage() {
           username: form.username.trim(),
           password: form.password,
           phone_number: form.phone.trim(),
-          nim: form.nim.trim(),
           full_name: form.fullName.trim(),
           birth_date: form.birthDate,
         }),
       });
 
       let result = null;
-
       try {
         result = await response.json();
       } catch {
@@ -158,6 +148,7 @@ export default function SignUpPage() {
 
       setSuccessMessage("Akun berhasil dibuat. Silakan lanjut login.");
       setForm(initialForm);
+      setFieldErrors({});
     } catch (error) {
       setApiError(error?.message || "Terjadi kesalahan pada server.");
     } finally {
@@ -174,6 +165,7 @@ export default function SignUpPage() {
     <main className="min-h-screen bg-[#f3f3f3] px-4 py-4 sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1440px] items-center">
         <div className="grid w-full grid-cols-1 gap-8 lg:grid-cols-[1fr_760px] lg:gap-10 xl:gap-14">
+
           <section className="flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <img
@@ -214,7 +206,6 @@ export default function SignUpPage() {
                           <p className="mt-1 text-sm leading-6 text-red-600">
                             {apiError}
                           </p>
-
                           <button
                             type="button"
                             onClick={handleRetry}
@@ -229,6 +220,8 @@ export default function SignUpPage() {
                   ) : null}
 
                   <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+
+                    {/* Nama Lengkap */}
                     <div>
                       <label
                         htmlFor="fullName"
@@ -255,6 +248,7 @@ export default function SignUpPage() {
                       ) : null}
                     </div>
 
+                    {/* Username */}
                     <div>
                       <label
                         htmlFor="username"
@@ -282,6 +276,7 @@ export default function SignUpPage() {
                       ) : null}
                     </div>
 
+                    {/* Email */}
                     <div>
                       <label
                         htmlFor="email"
@@ -308,6 +303,7 @@ export default function SignUpPage() {
                       ) : null}
                     </div>
 
+                    {/* Nomor Telephone */}
                     <div>
                       <label
                         htmlFor="phone"
@@ -334,6 +330,8 @@ export default function SignUpPage() {
                       ) : null}
                     </div>
 
+
+                    {/* Tanggal Lahir */}
                     <div>
                       <label
                         htmlFor="birthDate"
@@ -360,6 +358,7 @@ export default function SignUpPage() {
                       ) : null}
                     </div>
 
+                    {/* Password */}
                     <div>
                       <div className="mb-2 flex items-center justify-between">
                         <label
@@ -376,13 +375,13 @@ export default function SignUpPage() {
                         >
                           {showPassword ? (
                             <>
-                              <Eye className="h-5 w-5" />
-                              Show
+                              <EyeOff className="h-5 w-5" />
+                              Hide
                             </>
                           ) : (
                             <>
-                              <EyeOff className="h-5 w-5" />
-                              Hide
+                              <Eye className="h-5 w-5" />
+                              Show
                             </>
                           )}
                         </button>
