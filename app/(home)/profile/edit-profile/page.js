@@ -44,7 +44,6 @@ export default function EditProfilePage() {
 
   const getAvatarUrl = (userId, version = Date.now()) => {
     if (!userId) return "";
-
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "";
     return `${baseUrl}/api/v1/user/avatar/${userId}?v=${version}`;
   };
@@ -97,17 +96,14 @@ export default function EditProfilePage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
+    // ✅ Clear error saat user mulai mengedit
+    if (error) setError("");
   };
 
   const handleUploadAvatar = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     e.target.value = "";
 
     if (file.size > 2 * 1024 * 1024) {
@@ -134,12 +130,10 @@ export default function EditProfilePage() {
 
       if (!res.ok) {
         let message = "Upload foto gagal";
-
         try {
           const data = await res.json();
           message = data?.detail || data?.message || JSON.stringify(data);
         } catch {}
-
         throw new Error(message);
       }
 
@@ -159,22 +153,64 @@ export default function EditProfilePage() {
     }
   };
 
+  const mapBackendError = (err) => {
+    const raw = String(err?.message || "").toLowerCase();
+
+    if (
+      raw.includes("not a valid email") ||
+      raw.includes("email") && raw.includes("not valid") ||
+      raw.includes("value is not a valid email") ||
+      raw.includes("part after the @-sign") ||
+      raw.includes("should have a period")
+    ) {
+      return "Format email tidak valid. Pastikan email mengandung domain yang benar, contoh: user@gmail.com";
+    }
+
+    if (raw.includes("username") && (raw.includes("taken") || raw.includes("already") || raw.includes("exist"))) {
+      return "Username sudah digunakan. Coba username lain.";
+    }
+
+    if (raw.includes("email") && (raw.includes("taken") || raw.includes("already") || raw.includes("exist"))) {
+      return "Email sudah terdaftar. Gunakan email lain.";
+    }
+
+    if (raw.includes("password") && raw.includes("contain")) {
+      return "Password harus memiliki minimal satu huruf, satu angka, dan satu karakter spesial.";
+    }
+
+    return err?.message || "Profil gagal disimpan. Silakan coba lagi.";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
 
-    if (form.newPassword && form.newPassword !== form.confirmPassword) {
-      setError("Password baru dan verifikasi password tidak sama.");
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError("Format email tidak valid. Pastikan email mengandung domain yang benar, contoh: user@gmail.com");
       return;
     }
 
-    if (form.newPassword && form.newPassword.length < 8) {
-      setError("Password baru minimal 8 karakter.");
-      return;
+    if (form.newPassword) {
+      if (form.newPassword.length < 8) {
+        setError("Password baru minimal 8 karakter.");
+        return;
+      }
+
+      if (!/^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/.test(form.newPassword)) {
+        setError(
+          "Password baru harus memiliki minimal satu huruf, satu angka, dan satu karakter spesial (contoh: Abc@1234)."
+        );
+        return;
+      }
+
+      if (form.newPassword !== form.confirmPassword) {
+        setError("Password baru dan verifikasi password tidak sama.");
+        return;
+      }
     }
 
     try {
       setSaving(true);
-      setError("");
 
       const payload = {
         username: form.username || null,
@@ -204,7 +240,7 @@ export default function EditProfilePage() {
       setShowSuccess(true);
       await fetchProfile();
     } catch (err) {
-      setError(err?.message || "Profil gagal disimpan. Silakan coba lagi.");
+      setError(mapBackendError(err));
     } finally {
       setSaving(false);
     }
@@ -266,14 +302,12 @@ export default function EditProfilePage() {
               <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <p>{error}</p>
             </div>
-
             <button
               type="button"
-              onClick={fetchProfile}
+              onClick={() => setError("")}
               className="flex shrink-0 items-center gap-1 font-semibold"
             >
-              <RefreshCcw size={15} />
-              Coba lagi
+              ✕
             </button>
           </div>
         )}
@@ -315,7 +349,6 @@ export default function EditProfilePage() {
                   <p className="mt-1 text-[13px] font-medium text-[#666]">
                     JPG, PNG atau GIF. Maksimal 2MB
                   </p>
-
                   <label className="mt-3 inline-block cursor-pointer rounded-xl bg-[#d9d9d9] px-8 py-2 text-[14px] font-semibold text-black hover:bg-[#cfcfcf]">
                     Upload Foto
                     <input
@@ -344,6 +377,7 @@ export default function EditProfilePage() {
                     value={form.email}
                     onChange={handleChange}
                     icon="mail"
+                    type="email"
                   />
 
                   <Input
@@ -371,12 +405,10 @@ export default function EditProfilePage() {
                     onChange={handleChange}
                     icon="lock"
                     type={showNewPassword ? "text" : "password"}
-                    helper="Kosongkan jika tidak ingin mengubah password"
+                    helper="Minimal 8 karakter, harus mengandung huruf, angka, dan karakter spesial. Kosongkan jika tidak ingin mengubah password."
                     showPasswordToggle
                     isPasswordVisible={showNewPassword}
-                    onTogglePassword={() =>
-                      setShowNewPassword((prev) => !prev)
-                    }
+                    onTogglePassword={() => setShowNewPassword((prev) => !prev)}
                   />
 
                   <Input
@@ -388,9 +420,7 @@ export default function EditProfilePage() {
                     type={showConfirmPassword ? "text" : "password"}
                     showPasswordToggle
                     isPasswordVisible={showConfirmPassword}
-                    onTogglePassword={() =>
-                      setShowConfirmPassword((prev) => !prev)
-                    }
+                    onTogglePassword={() => setShowConfirmPassword((prev) => !prev)}
                   />
                 </div>
 
@@ -437,9 +467,7 @@ export default function EditProfilePage() {
 
             <button
               type="button"
-              onClick={() => {
-                setShowSuccess(false);
-              }}
+              onClick={() => setShowSuccess(false)}
               className="w-full rounded-lg border border-[#ED1C24] py-2 text-[13px] font-semibold text-[#ED1C24] transition hover:bg-red-50"
             >
               Kembali

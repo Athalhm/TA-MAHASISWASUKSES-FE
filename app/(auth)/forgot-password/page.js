@@ -17,8 +17,15 @@ export default function ForgotPasswordPage() {
     setError("");
     setSuccess("");
 
+    // ✅ Validasi kosong
     if (!email.trim()) {
       setError("Email wajib diisi.");
+      return;
+    }
+
+    // ✅ Validasi format email
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Format email tidak valid. Contoh: user@gmail.com");
       return;
     }
 
@@ -39,7 +46,6 @@ export default function ForgotPasswordPage() {
       );
 
       let data = null;
-
       try {
         data = await res.json();
       } catch {
@@ -47,17 +53,37 @@ export default function ForgotPasswordPage() {
       }
 
       if (!res.ok) {
+        // ✅ Mapping error berdasarkan status code dan pesan dari backend
+        const rawMessage = String(
+          data?.detail || data?.message || ""
+        ).toLowerCase();
+
+        if (res.status === 404 || rawMessage.includes("not found") || rawMessage.includes("tidak ditemukan")) {
+          throw new Error("Email tidak terdaftar. Periksa kembali alamat email kamu.");
+        }
+
+        if (res.status === 400 || rawMessage.includes("invalid email") || rawMessage.includes("email tidak valid")) {
+          throw new Error("Format email tidak valid. Contoh: user@gmail.com");
+        }
+
+        if (res.status === 429 || rawMessage.includes("too many") || rawMessage.includes("rate limit")) {
+          throw new Error("Terlalu banyak percobaan. Silakan tunggu beberapa menit lalu coba lagi.");
+        }
+
+        if (res.status >= 500) {
+          throw new Error("Server sedang bermasalah. Silakan coba beberapa saat lagi.");
+        }
+
+        // Fallback: tampilkan pesan dari backend kalau ada, atau pesan default
         throw new Error(
-          data?.detail ||
-            data?.message ||
-            "Gagal mengirim link reset password."
+          data?.detail || data?.message || "Gagal mengirim link reset password. Silakan coba lagi."
         );
       }
 
       localStorage.setItem("resetEmail", email.trim());
       router.push(`/forgot-password/sent?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
-      setError(err.message || "API gagal merespons. Silakan coba lagi nanti.");
+      setError(err.message || "Koneksi gagal. Periksa internet kamu dan coba lagi.");
     } finally {
       setLoading(false);
     }
@@ -85,8 +111,7 @@ export default function ForgotPasswordPage() {
           </h1>
 
           <p className="mt-3 max-w-[460px] text-sm leading-5 text-slate-600">
-            Masukkan email Anda dan kami akan mengirimkan link untuk reset
-            password
+            Masukkan email Anda dan kami akan mengirimkan link untuk reset password
           </p>
 
           <form
@@ -97,13 +122,25 @@ export default function ForgotPasswordPage() {
               Email Address
             </label>
 
-            <div className="flex h-[43px] items-center gap-3 rounded-lg bg-[#f1f1f3] px-3">
-              <Mail size={17} className="text-slate-400" />
-
+            <div
+              className={`flex h-[43px] items-center gap-3 rounded-lg px-3 ${
+                error
+                  ? "bg-red-50 ring-1 ring-red-300"
+                  : "bg-[#f1f1f3]"
+              }`}
+            >
+              <Mail
+                size={17}
+                className={error ? "text-red-400" : "text-slate-400"}
+              />
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  // ✅ Clear error saat user mulai mengetik ulang
+                  if (error) setError("");
+                }}
                 placeholder="user@gmail.com"
                 className="h-full w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-500"
               />

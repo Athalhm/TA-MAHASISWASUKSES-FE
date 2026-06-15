@@ -35,8 +35,10 @@ export default function Page() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ✅ State untuk konfirmasi delete
-  const [deleteTarget, setDeleteTarget] = useState(null); // { id, title }
+  // ✅ Error khusus untuk di dalam modal
+  const [formError, setFormError] = useState("");
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -154,15 +156,19 @@ export default function Page() {
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    // ✅ Clear form error saat user mengubah input
+    if (formError) setFormError("");
   };
 
   const handleOpenModal = () => {
+    setFormError("");
     setShowAddModal(true);
   };
 
   const handleCloseModal = () => {
     if (submitting) return;
     setShowAddModal(false);
+    setFormError("");
     setFormData({
       title: "",
       category: "Akademik",
@@ -172,16 +178,51 @@ export default function Page() {
     });
   };
 
+  // ✅ Helper: terjemahkan error backend deadline ke pesan ramah
+  const getDeadlineErrorMessage = (rawMessage, selectedDate) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const selectedYear = selectedDate.getFullYear();
+    const selectedMonth = selectedDate.getMonth();
+
+    if (selectedYear < currentYear) {
+      return `Deadline tidak bisa menggunakan tahun ${selectedYear}. Tahun tersebut sudah lewat.`;
+    }
+
+    if (selectedYear === currentYear && selectedMonth < currentMonth) {
+      const monthName = selectedDate.toLocaleDateString("id-ID", { month: "long" });
+      return `Deadline tidak bisa menggunakan bulan ${monthName}. Bulan tersebut sudah lewat.`;
+    }
+
+    return "Deadline tidak boleh berada di tanggal yang sudah lewat.";
+  };
+
   const handleSubmitTask = async (e) => {
     e.preventDefault();
+    setFormError("");
 
+    // Validasi judul
     if (!formData.title.trim()) {
-      alert("Judul tugas wajib diisi.");
+      setFormError("Judul tugas wajib diisi.");
       return;
     }
 
+    // Validasi deadline kosong
     if (!formData.deadline) {
-      alert("Deadline tugas wajib diisi.");
+      setFormError("Deadline tugas wajib diisi.");
+      return;
+    }
+
+    // ✅ Validasi deadline tidak boleh di masa lalu (client-side)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selectedDate = new Date(formData.deadline);
+
+    if (selectedDate < today) {
+      setFormError(getDeadlineErrorMessage("", selectedDate));
       return;
     }
 
@@ -195,7 +236,6 @@ export default function Page() {
 
     try {
       setSubmitting(true);
-      setErrorMessage("");
 
       await fetchWithAuth("/api/v1/progress-tracking/tasks", {
         method: "POST",
@@ -206,7 +246,21 @@ export default function Page() {
       handleCloseModal();
     } catch (error) {
       console.error(error);
-      setErrorMessage(error?.message || "Gagal menambahkan tugas.");
+
+      const rawMsg = String(error?.message || "").toLowerCase();
+
+      // ✅ Mapping error backend deadline ke pesan ramah di dalam modal
+      if (
+        rawMsg.includes("deadline cannot be in the past") ||
+        rawMsg.includes("past") ||
+        rawMsg.includes("deadline")
+      ) {
+        setFormError(getDeadlineErrorMessage(rawMsg, selectedDate));
+        return;
+      }
+
+      // Error lain tetap tampil di dalam modal
+      setFormError(error?.message || "Gagal menambahkan tugas. Silakan coba lagi.");
     } finally {
       setSubmitting(false);
     }
@@ -228,13 +282,11 @@ export default function Page() {
     }
   };
 
-  // ✅ Buka modal konfirmasi delete
   const handleAskDelete = (e, task) => {
     e.stopPropagation();
     setDeleteTarget({ id: task.id, title: task.title });
   };
 
-  // ✅ Eksekusi delete setelah konfirmasi
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
 
@@ -246,9 +298,7 @@ export default function Page() {
         { method: "DELETE" }
       );
 
-      // Hapus dari state lokal tanpa perlu refetch
       setTasks((prev) => prev.filter((t) => t.id !== deleteTarget.id));
-
       setDeleteTarget(null);
     } catch (error) {
       console.error("Delete task error:", error);
@@ -364,7 +414,6 @@ export default function Page() {
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  {/* Tombol toggle selesai */}
                   <button
                     type="button"
                     onClick={() => handleToggleTaskProgress(task)}
@@ -401,7 +450,6 @@ export default function Page() {
                   </div>
                 </div>
 
-                {/* ✅ Priority badge + tombol delete */}
                 <div className="flex shrink-0 items-center gap-2 sm:pl-4">
                   <span
                     className={`inline-flex min-w-[58px] items-center justify-center rounded-full border px-4 py-[5px] text-[11px] font-semibold leading-none shadow-[0_2px_4px_rgba(0,0,0,0.08)] ${getPriorityBadge(
@@ -411,7 +459,6 @@ export default function Page() {
                     {getPriorityLabel(task.priority)}
                   </span>
 
-                  {/* ✅ Tombol delete */}
                   <button
                     type="button"
                     onClick={(e) => handleAskDelete(e, task)}
@@ -610,7 +657,11 @@ export default function Page() {
                       type="date"
                       value={formData.deadline}
                       onChange={(e) => handleInputChange("deadline", e.target.value)}
-                      className="h-11 w-full rounded-xl border border-[#d1d1d1] bg-transparent px-4 text-sm text-[#666] outline-none focus:border-[#ff4d4f]"
+                      className={`h-11 w-full rounded-xl border bg-transparent px-4 text-sm text-[#666] outline-none focus:border-[#ff4d4f] ${
+                        formError && formError.toLowerCase().includes("deadline")
+                          ? "border-red-400"
+                          : "border-[#d1d1d1]"
+                      }`}
                     />
                   </div>
 
@@ -657,6 +708,14 @@ export default function Page() {
                   />
                 </div>
 
+                {/* ✅ Error ditampilkan di DALAM modal */}
+                {formError && (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                    <p className="text-sm text-red-600">{formError}</p>
+                  </div>
+                )}
+
                 <div className="flex flex-col-reverse gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
                   <button
                     type="button"
@@ -679,7 +738,7 @@ export default function Page() {
         </div>
       )}
 
-      {/* ✅ Modal konfirmasi delete */}
+      {/* Modal konfirmasi delete */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-[400px] rounded-[16px] bg-white px-6 py-7 text-center shadow-[0_20px_60px_rgba(0,0,0,0.2)]">

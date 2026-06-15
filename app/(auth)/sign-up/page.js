@@ -24,7 +24,6 @@ export default function SignUpPage() {
   const [apiError, setApiError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // ✅ Fix: clear error hanya untuk field yang sedang diketik
   function handleChange(e) {
     const { name, value } = e.target;
 
@@ -63,7 +62,6 @@ export default function SignUpPage() {
       errors.phone = "Nomor telephone tidak valid.";
     }
 
-    // ✅ Fix: NIM sekarang divalidasi dan ada input-nya di form
     if (!form.birthDate) {
       errors.birthDate = "Tanggal lahir wajib diisi.";
     }
