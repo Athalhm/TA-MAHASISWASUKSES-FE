@@ -3,11 +3,20 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  GraduationCap,
+  ShieldCheck,
+} from "lucide-react";
 
 export default function SignInPage() {
   const router = useRouter();
 
+  const [role, setRole] = useState("mahasiswa");
   const [form, setForm] = useState({
     emailOrUsername: "",
     password: "",
@@ -21,15 +30,18 @@ export default function SignInPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
+    setForm((prev) => ({ ...prev, [name]: value }));
     if (errorMessage) setErrorMessage("");
     if (successMessage) setSuccessMessage("");
     if (apiFailed) setApiFailed(false);
+  };
+
+  const handleRoleChange = (nextRole) => {
+    if (loading) return;
+    setRole(nextRole);
+    setErrorMessage("");
+    setSuccessMessage("");
+    setApiFailed(false);
   };
 
   const validateForm = () => {
@@ -37,35 +49,29 @@ export default function SignInPage() {
       setErrorMessage("Email/username dan password wajib diisi.");
       return false;
     }
-
     return true;
   };
 
   const getErrorMessage = (data) => {
     if (!data) return "Terjadi kesalahan saat sign in.";
-
     if (Array.isArray(data?.detail)) {
       return data.detail
         .map((item) => item?.msg)
         .filter(Boolean)
         .join(", ");
     }
-
     if (typeof data?.detail === "string") return data.detail;
     if (typeof data?.message === "string") return data.message;
-
     return "Terjadi kesalahan saat sign in.";
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setErrorMessage("");
     setSuccessMessage("");
     setApiFailed(false);
 
     if (!validateForm()) return;
-
     setLoading(true);
 
     try {
@@ -76,12 +82,11 @@ export default function SignInPage() {
 
       const response = await fetch(`${baseUrl}/api/v1/auth/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email_or_username: form.emailOrUsername.trim(),
           password: form.password,
+          role,
         }),
         signal: controller.signal,
       });
@@ -99,6 +104,22 @@ export default function SignInPage() {
         throw new Error(getErrorMessage(data));
       }
 
+      const accountRole = (data?.user?.role || "").toLowerCase();
+
+      if (!accountRole) {
+        throw new Error("Data role akun tidak diterima dari server. Coba lagi.");
+      }
+      if (role === "admin" && accountRole !== "admin") {
+        throw new Error(
+          "Akun ini bukan akun admin. Silakan pilih tab Mahasiswa lalu masuk kembali."
+        );
+      }
+      if (role === "mahasiswa" && accountRole !== "student") {
+        throw new Error(
+          "Akun ini bukan akun mahasiswa. Silakan pilih tab Admin lalu masuk kembali."
+        );
+      }
+
       if (typeof window !== "undefined") {
         localStorage.setItem("token", data?.access_token || "");
         localStorage.setItem("refresh_token", data?.refresh_token || "");
@@ -107,14 +128,13 @@ export default function SignInPage() {
       }
 
       setSuccessMessage("Sign in berhasil.");
-
-      setForm({
-        emailOrUsername: "",
-        password: "",
-      });
-
+      setForm({ emailOrUsername: "", password: "" });
       setTimeout(() => {
-        router.push("/dashboard");
+        if (accountRole === "admin") {
+          router.push("/admin/dashboard-admin");
+        } else {
+          router.push("/dashboard");
+        }
       }, 800);
     } catch (error) {
       if (error.name === "AbortError") {
@@ -122,7 +142,6 @@ export default function SignInPage() {
         setErrorMessage("Permintaan timeout. Silakan coba lagi.");
       } else {
         const lowerMessage = (error?.message || "").toLowerCase();
-
         if (
           lowerMessage.includes("failed to fetch") ||
           lowerMessage.includes("network") ||
@@ -148,35 +167,50 @@ export default function SignInPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f3f3f3]">
-      <section className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col items-center px-4 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 flex flex-col items-center justify-center sm:mb-8">
-          <div className="mb-3 flex h-[56px] w-[56px] items-center justify-center">
+    <main className="min-h-screen bg-[#f7f7f7]">
+      <section className="mx-auto flex min-h-screen w-full max-w-[520px] flex-col items-center px-4 py-8 sm:py-12">
+        <div className="mb-6 flex flex-col items-center">
+          <div className="mb-2 h-14 w-14">
             <img
               src="/images/logo background merah.png"
               alt="Logo Levelin"
               className="h-full w-full object-contain"
             />
           </div>
-            <img
-              src="/images/logo tulisan aja.png"
-              alt="Levelin"
-              className="h-auto w-[180px] object-contain"
-            />
+          <img
+            src="/images/logo tulisan aja.png"
+            alt="Levelin"
+            className="h-auto w-[130px] object-contain"
+          />
         </div>
 
-        <div className="w-full max-w-[640px] rounded-[28px] border border-red-400 bg-transparent px-6 py-8 sm:px-14 sm:py-10">
-          <h2 className="mb-12 text-center text-[36px] font-medium leading-none text-[#353535] sm:mb-14 sm:text-[48px]">
+        <div className="w-full rounded-3xl border-2 border-red-200 bg-white px-6 py-8 sm:px-10 sm:py-10">
+          <h2 className="mb-6 text-center text-2xl font-bold text-gray-900 sm:text-3xl">
             Sign in
           </h2>
 
+          <div className="mb-6 grid grid-cols-2 gap-2">
+            <RoleButton
+              active={role === "mahasiswa"}
+              onClick={() => handleRoleChange("mahasiswa")}
+              icon={GraduationCap}
+              label="Mahasiswa"
+            />
+            <RoleButton
+              active={role === "admin"}
+              onClick={() => handleRoleChange("admin")}
+              icon={ShieldCheck}
+              label="Admin"
+            />
+          </div>
+
           <form onSubmit={handleSubmit} className="flex flex-col">
-            <div className="mb-6">
+            <div className="mb-4">
               <label
                 htmlFor="emailOrUsername"
-                className="mb-3 block text-[18px] font-medium text-[#6f6f6f] sm:text-[20px]"
+                className="mb-2 block text-sm font-medium text-gray-700"
               >
-                Email / Username
+                Email atau username
               </label>
               <input
                 id="emailOrUsername"
@@ -186,25 +220,27 @@ export default function SignInPage() {
                 value={form.emailOrUsername}
                 onChange={handleChange}
                 disabled={loading}
-                className="h-[54px] w-full rounded-[14px] border border-[#c9c9c9] bg-transparent px-4 text-[16px] text-[#353535] outline-none transition focus:border-[#9d9d9d] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[56px] sm:text-[18px]"
+                placeholder={
+                  role === "admin" ? "admin@ms.ac.id" : "nama@ms.ac.id"
+                }
+                className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-red-400 focus:ring-1 focus:ring-red-400 disabled:cursor-not-allowed disabled:opacity-70"
               />
             </div>
 
-            <div className="mb-6">
-              <div className="mb-3 flex items-center justify-between">
+            <div className="mb-5">
+              <div className="mb-2 flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="text-[18px] font-medium text-[#6f6f6f] sm:text-[20px]"
+                  className="text-sm font-medium text-gray-700"
                 >
                   Password
                 </label>
-
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="inline-flex items-center gap-2 text-[16px] font-medium text-[#7a7a7a] transition hover:text-[#4d4d4d] sm:text-[18px]"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition hover:text-gray-700"
                 >
-                  {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                  {showPassword ? <Eye size={14} /> : <EyeOff size={14} />}
                   <span>{showPassword ? "Show" : "Hide"}</span>
                 </button>
               </div>
@@ -217,13 +253,14 @@ export default function SignInPage() {
                 value={form.password}
                 onChange={handleChange}
                 disabled={loading}
-                className="h-[54px] w-full rounded-[14px] border border-[#c9c9c9] bg-transparent px-4 text-[16px] text-[#353535] outline-none transition focus:border-[#9d9d9d] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[56px] sm:text-[18px]"
+                placeholder="••••••••"
+                className="h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-red-400 focus:ring-1 focus:ring-red-400 disabled:cursor-not-allowed disabled:opacity-70"
               />
             </div>
 
             {(errorMessage || successMessage) && (
               <div
-                className={`mb-5 rounded-[14px] border px-4 py-3 text-sm ${
+                className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
                   errorMessage
                     ? "border-red-200 bg-red-50 text-red-700"
                     : "border-green-200 bg-green-50 text-green-700"
@@ -231,7 +268,7 @@ export default function SignInPage() {
               >
                 <div className="flex items-start gap-2">
                   {errorMessage ? (
-                    <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
                   ) : (
                     <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-green-600" />
                   )}
@@ -241,23 +278,22 @@ export default function SignInPage() {
             )}
 
             {apiFailed && (
-              <div className="mb-5 rounded-[14px] border border-[#d7d7d7] bg-white px-4 py-4">
+              <div className="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-[#353535]">
+                    <p className="text-sm font-semibold text-gray-800">
                       Server sedang tidak merespons
                     </p>
-                    <p className="mt-1 text-sm text-[#7a7a7a]">
+                    <p className="mt-1 text-xs text-gray-500">
                       Periksa koneksi atau coba lagi dalam beberapa saat.
                     </p>
                   </div>
-
                   <button
                     type="button"
                     onClick={handleRetry}
-                    className="inline-flex items-center justify-center gap-2 rounded-[12px] border border-[#cfcfcf] px-4 py-2 text-sm font-medium text-[#353535] transition hover:bg-[#f7f7f7]"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
                   >
-                    <RefreshCw size={16} />
+                    <RefreshCw size={14} />
                     Coba Lagi
                   </button>
                 </div>
@@ -267,11 +303,11 @@ export default function SignInPage() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 flex h-[64px] w-full items-center justify-center rounded-full bg-[#ff1828] px-6 text-[22px] font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-70 sm:text-[24px]"
+              className="flex h-12 w-full items-center justify-center rounded-full bg-red-600 px-6 text-base font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-2">
-                  <Loader2 size={22} className="animate-spin" />
+                  <Loader2 size={18} className="animate-spin" />
                   Logging in...
                 </span>
               ) : (
@@ -279,20 +315,22 @@ export default function SignInPage() {
               )}
             </button>
 
-            <p className="mt-3 text-center text-[14px] text-[#7a7a7a] sm:text-[15px]">
-              Belum punya akun ?{" "}
+            <p className="mt-4 text-center text-sm text-gray-500">
+              Belum punya akun?{" "}
               <Link
                 href="/sign-up"
-                className="font-medium text-[#2f6fff] hover:underline"
+                className="font-semibold text-red-600 hover:underline"
               >
                 Sign Up
               </Link>
             </p>
 
-            <div className="mt-20 flex justify-end sm:mt-24">
+            <div className="my-5 border-t border-gray-100" />
+
+            <div className="text-center">
               <Link
                 href="/forgot-password"
-                className="text-[16px] text-[#0070f3] underline underline-offset-2 hover:opacity-80 sm:text-[18px]"
+                className="text-sm font-medium text-red-600 hover:underline"
               >
                 Lupa password ?
               </Link>
@@ -301,5 +339,22 @@ export default function SignInPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+function RoleButton({ active, onClick, icon: Icon, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
+        active
+          ? "bg-red-600 text-white shadow-sm shadow-red-200"
+          : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+      }`}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
   );
 }
